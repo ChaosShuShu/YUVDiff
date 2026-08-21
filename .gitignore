@@ -1,12 +1,11 @@
-.plugin-cache/
 __pycache__/
 *.pyc
 *.pyo
-.eggs/
 *.egg-info/
+.eggs/
 build/
 dist/
 .pytest_cache/
-.coverage
 .venv/
 venv/
+.coverage
