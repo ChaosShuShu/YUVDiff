@@ -1,7 +1,8 @@
 import os
 import pytest
 
-from yuvdiff.parser import YUVParser, YUVFrame
+from yuvdiff.formats import BitAlignment
+from yuvdiff.parser import YUVParser, YUVFrame, auto_detect_alignment
 from tests.conftest import _write_synthetic_yuv
 
 
@@ -95,3 +96,44 @@ class TestParserFormats:
         p = YUVParser(str(path), "YUV420P8", 32, 16)
         with pytest.raises(IndexError, match="out of range"):
             p.read_frame(p.num_frames)
+
+
+class Test10bitAlignment:
+    def test_msb_alignment_recovers_values(self, synth_yuv_420p10le):
+        path, fmt, w, h, n = synth_yuv_420p10le
+        p = YUVParser(path, fmt, w, h, bit_alignment=BitAlignment.MSB)
+        frame = p.read_frame(0)
+        # Fixture writes values in [0, 1023]; with MSB-aligned we recover them.
+        assert frame.y.max() > 100
+        assert frame.y.max() <= 1023
+
+    def test_lsb_alignment_recovers_values(self, synth_yuv_420p10le_lsb):
+        path, fmt, w, h, n = synth_yuv_420p10le_lsb
+        p = YUVParser(path, fmt, w, h, bit_alignment=BitAlignment.LSB)
+        frame = p.read_frame(0)
+        assert frame.y.max() > 100
+        assert frame.y.max() <= 1023
+
+    def test_lsb_data_misread_as_msb_collapses(self, synth_yuv_420p10le_lsb):
+        path, fmt, w, h, n = synth_yuv_420p10le_lsb
+        # If we force MSB on LSB data, all values collapse to 0..15.
+        p = YUVParser(path, fmt, w, h, bit_alignment=BitAlignment.MSB)
+        frame = p.read_frame(0)
+        assert frame.y.max() <= 16
+
+    def test_auto_detect_picks_lsb_on_lsb_data(self, synth_yuv_420p10le_lsb):
+        path, fmt, w, h, n = synth_yuv_420p10le_lsb
+        detected = auto_detect_alignment(path, fmt, w, h)
+        assert detected == BitAlignment.LSB
+
+    def test_auto_detect_picks_msb_on_msb_data(self, synth_yuv_420p10le):
+        path, fmt, w, h, n = synth_yuv_420p10le
+        detected = auto_detect_alignment(path, fmt, w, h)
+        assert detected == BitAlignment.MSB
+
+    def test_auto_string_works_in_parser(self, synth_yuv_420p10le_lsb):
+        path, fmt, w, h, n = synth_yuv_420p10le_lsb
+        p = YUVParser(path, fmt, w, h, bit_alignment="auto")
+        assert p.bit_alignment == BitAlignment.LSB
+        frame = p.read_frame(0)
+        assert frame.y.max() > 100  # values recovered correctly

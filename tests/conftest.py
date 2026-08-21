@@ -18,8 +18,13 @@ def _write_synthetic_yuv(
     height: int,
     num_frames: int,
     rng: np.random.Generator,
+    alignment: str = "msb",
 ) -> str:
-    """Write a tiny synthetic YUV file and return the format string used."""
+    """Write a tiny synthetic YUV file and return the format string used.
+
+    `alignment` is only relevant for *10LE formats: "msb" (default) puts
+    the 10-bit value in bits [15:6]; "lsb" leaves it in bits [9:0].
+    """
     fmt_map = {
         "YUV420P8": (PixelFormat.YUV420P, BitDepth.BIT8, np.uint8),
         "YUV422P8": (PixelFormat.YUV422P, BitDepth.BIT8, np.uint8),
@@ -41,9 +46,11 @@ def _write_synthetic_yuv(
             u = rng.integers(0, max_val + 1, size=(cy, cx), dtype=dtype)
             v = rng.integers(0, max_val + 1, size=(cy, cx), dtype=dtype)
             if bit_depth == BitDepth.BIT10LE:
-                y = (y.astype(np.uint16) << 6)
-                u = (u.astype(np.uint16) << 6)
-                v = (v.astype(np.uint16) << 6)
+                if alignment == "msb":
+                    y = (y.astype(np.uint16) << 6)
+                    u = (u.astype(np.uint16) << 6)
+                    v = (v.astype(np.uint16) << 6)
+                # lsb: leave raw 10-bit values, no shift
                 f.write(y.astype("<u2").tobytes())
                 f.write(u.astype("<u2").tobytes())
                 f.write(v.astype("<u2").tobytes())
@@ -95,3 +102,11 @@ def synth_yuv_444p10le(tmp_path, rng):
     path = tmp_path / "synth_444p10le.yuv"
     fmt = _write_synthetic_yuv(path, "YUV444P10LE", 32, 16, 5, rng)
     return str(path), fmt, 32, 16, 5
+
+
+@pytest.fixture
+def synth_yuv_420p10le_lsb(tmp_path, rng):
+    """LSB-aligned 10-bit YUV420P (value in bits [9:0])."""
+    path = tmp_path / "synth_420p10le_lsb.yuv"
+    _write_synthetic_yuv(path, "YUV420P10LE", 32, 16, 5, rng, alignment="lsb")
+    return str(path), "YUV420P10LE", 32, 16, 5

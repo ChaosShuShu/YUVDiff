@@ -26,7 +26,20 @@ class BitDepth(Enum):
     """Bit depth and byte order."""
 
     BIT8 = 8
-    BIT10LE = 10  # 16-bit LE storage, value in bits [15:6]
+    BIT10LE = 10  # 16-bit LE storage, value placement depends on BitAlignment
+
+
+class BitAlignment(Enum):
+    """Where the 10-bit payload sits inside its 16-bit LE word.
+
+    MSB-aligned (default; H.264/HEVC/AV1 reference convention):
+        value lives in bits [15:6]; recover via `word >> 6`.
+    LSB-aligned (some FFmpeg/x264 builds, certain encoders):
+        value lives in bits [9:0]; recover via `word & 0x3FF`.
+    """
+
+    MSB = "msb"
+    LSB = "lsb"
 
 
 _FORMAT_RE = re.compile(r"^(YUV(?:420P|422P|444P))(8|10LE|10BE)?$")

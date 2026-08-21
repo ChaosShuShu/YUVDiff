@@ -9,3 +9,8 @@ dist/
 .venv/
 venv/
 .coverage
+.home/
+.plugin-cache/
+*.tmp
+*.bak
+yuvdiff-*.tar.gz

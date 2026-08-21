@@ -20,7 +20,7 @@ import sys
 from typing import Optional
 
 from yuvdiff.diff import DiffEngine
-from yuvdiff.formats import parse_format
+from yuvdiff.formats import BitDepth, parse_format
 from yuvdiff.metrics import MetricsCalculator
 from yuvdiff.parser import YUVParser
 
@@ -46,23 +46,41 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "--threshold", type=int, default=4,
         help="Pixel diff threshold for mask (default: 4)",
     )
+    p.add_argument(
+        "--10bit-align", dest="tenbit_align",
+        choices=["msb", "lsb", "auto"], default="auto",
+        help="10-bit byte alignment (default: auto-detect from header)",
+    )
     return p
 
 
 def main(argv: Optional[list[str]] = None) -> int:
     args = _build_arg_parser().parse_args(argv)
     try:
-        parse_format(args.format)
+        _, bit_depth = parse_format(args.format)
     except ValueError as e:
         print(f"yuvdiff: {e}", file=sys.stderr)
         return 1
 
+    # 8-bit files ignore the alignment flag; force msb.
+    align = args.tenbit_align if bit_depth == BitDepth.BIT10LE else "msb"
+
     try:
-        parser_a = YUVParser(args.a, args.format, args.width, args.height)
-        parser_b = YUVParser(args.b, args.format, args.width, args.height)
+        parser_a = YUVParser(
+            args.a, args.format, args.width, args.height, bit_alignment=align
+        )
+        parser_b = YUVParser(
+            args.b, args.format, args.width, args.height, bit_alignment=align
+        )
     except (FileNotFoundError, ValueError, OSError) as e:
         print(f"yuvdiff: {e}", file=sys.stderr)
         return 2
+
+    if args.tenbit_align == "auto" and bit_depth == BitDepth.BIT10LE:
+        print(
+            f"# 10-bit alignment auto-detected: {parser_a.bit_alignment.value}",
+            file=sys.stderr,
+        )
 
     n = args.frames
     if n is None:

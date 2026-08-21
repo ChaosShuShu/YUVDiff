@@ -19,8 +19,9 @@ from typing import Optional
 import numpy as np
 
 from yuvdiff.diff import DiffEngine, DiffResult
+from yuvdiff.formats import BitAlignment, BitDepth, parse_format
 from yuvdiff.metrics import MetricsCalculator
-from yuvdiff.parser import YUVFrame, YUVParser
+from yuvdiff.parser import YUVFrame, YUVParser, auto_detect_alignment
 from yuvdiff.renderer import RenderMode, Renderer
 
 try:
@@ -103,12 +104,19 @@ if _QT_AVAILABLE:
             self.btn_open_b.clicked.connect(lambda: self._on_open("b"))
             self.combo_format = QComboBox()
             self.combo_format.addItems(FORMAT_OPTIONS)
+            self.combo_format.currentTextChanged.connect(self._on_format_changed)
             self.spin_w = QSpinBox()
             self.spin_w.setRange(1, 16384)
             self.spin_w.setValue(1920)
             self.spin_h = QSpinBox()
             self.spin_h.setRange(1, 16384)
             self.spin_h.setValue(1080)
+            # 10-bit alignment dropdown (only relevant for *10LE formats)
+            self.combo_align = QComboBox()
+            self.combo_align.addItem("Auto", "auto")
+            self.combo_align.addItem("MSB (HEVC/AV1)", BitAlignment.MSB)
+            self.combo_align.addItem("LSB (some FFmpeg)", BitAlignment.LSB)
+            self.lbl_align = QLabel("10-bit align:")
             tb1.addWidget(self.btn_open_a)
             tb1.addWidget(self.btn_open_b)
             tb1.addWidget(QLabel("Format:"))
@@ -117,7 +125,10 @@ if _QT_AVAILABLE:
             tb1.addWidget(self.spin_w)
             tb1.addWidget(QLabel("H:"))
             tb1.addWidget(self.spin_h)
+            tb1.addWidget(self.lbl_align)
+            tb1.addWidget(self.combo_align)
             root.addLayout(tb1)
+            self._on_format_changed(self.combo_format.currentText())
 
             # Toolbar row 2: threshold + mode + play + export
             tb2 = QHBoxLayout()
@@ -206,7 +217,8 @@ if _QT_AVAILABLE:
                 fmt = self.combo_format.currentText()
                 w = self.spin_w.value()
                 h = self.spin_h.value()
-                parser = YUVParser(path, fmt, w, h)
+                align = self.combo_align.currentData()
+                parser = YUVParser(path, fmt, w, h, bit_alignment=align)
             except Exception as e:
                 QMessageBox.critical(self, "Open failed", str(e))
                 return
@@ -244,6 +256,12 @@ if _QT_AVAILABLE:
         def _set_mode(self, mode: RenderMode) -> None:
             self.combo_mode.setCurrentIndex(list(RenderMode).index(mode))
             self._show_frame(self.slider.value())
+
+        def _on_format_changed(self, fmt: str) -> None:
+            """Show the 10-bit-align dropdown only for *10LE formats."""
+            is_10bit = "10LE" in fmt
+            self.lbl_align.setVisible(is_10bit)
+            self.combo_align.setVisible(is_10bit)
 
         def _on_play_toggle(self, on: bool) -> None:
             if on:
@@ -295,11 +313,15 @@ if _QT_AVAILABLE:
             n = self.slider.maximum() + 1
             idx = self.slider.value()
             pct = 100.0 * diff.diff_pixel_count / max(1, diff.total_pixel_count)
+            align = ""
+            if self.parser_a and self.parser_a.bit_depth == 10:
+                align = f"  |  Align={self.parser_a.bit_alignment.value}"
             self.lbl_metrics.setText(
                 f"Frame {idx}/{n-1}  |  "
                 f"PSNR Y={psnr.y:.2f} U={psnr.u:.2f} V={psnr.v:.2f} T={psnr.total:.2f}  |  "
                 f"SSIM Y={ssim.y:.4f}  |  "
                 f"Diff: {pct:.2f}% ({diff.diff_pixel_count}/{diff.total_pixel_count})"
+                f"{align}"
             )
 
         def _on_export_current(self) -> None:
