@@ -77,3 +77,28 @@ TEST_CASE(test_diff_chroma_upsampling) {
     // In 420P, one chroma pixel corresponds to a 2x2 block in Y resolution = 4 pixels
     ASSERT_EQ(res.diff_pixel_count, 4LL);
 }
+
+TEST_CASE(test_diff_cross_depth) {
+    YUVFrame a = make_frame(16, 16, 100, 128, 128); // 8-bit Y=100 -> equivalent 10-bit Y=400
+    YUVFrame b;
+    b.width = 16;
+    b.height = 16;
+    b.bit_depth = 10;
+    b.pixel_format = PixelFormat::YUV420P;
+    b.y16.resize(16 * 16, 400); // exactly matching
+    b.u16.resize(8 * 8, 512);   // 128 * 4 = 512
+    b.v16.resize(8 * 8, 512);
+
+    DiffEngine engine(4);
+    DiffResult res = engine.diff(a, b);
+    ASSERT_EQ(res.diff_pixel_count, 0LL);
+}
+
+TEST_CASE(test_diff_cross_chroma_format) {
+    YUVFrame a = make_frame(16, 16, 100, 128, 128, PixelFormat::YUV420P);
+    YUVFrame b = make_frame(16, 16, 100, 128, 128, PixelFormat::YUV422P);
+
+    DiffEngine engine(4);
+    DiffResult res = engine.diff(a, b);
+    ASSERT_EQ(res.diff_pixel_count, 0LL);
+}

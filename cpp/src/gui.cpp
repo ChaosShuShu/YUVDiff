@@ -50,16 +50,23 @@ void MainWindow::build_ui() {
     // Toolbar Row 1
     QHBoxLayout* tb1 = new QHBoxLayout();
     btn_open_a_ = new QPushButton("Open A…", this);
-    btn_open_b_ = new QPushButton("Open B…", this);
-    connect(btn_open_a_, &QPushButton::clicked, this, &MainWindow::on_open_a);
-    connect(btn_open_b_, &QPushButton::clicked, this, &MainWindow::on_open_b);
-
-    combo_format_ = new QComboBox(this);
-    combo_format_->addItems({
+    combo_format_a_ = new QComboBox(this);
+    combo_format_a_->addItems({
         "YUV420P8", "YUV422P8", "YUV444P8",
         "YUV420P10LE", "YUV422P10LE", "YUV444P10LE"
     });
-    connect(combo_format_, &QComboBox::currentTextChanged, this, &MainWindow::on_format_changed);
+    connect(combo_format_a_, &QComboBox::currentTextChanged, this, &MainWindow::on_format_a_changed);
+
+    btn_open_b_ = new QPushButton("Open B…", this);
+    combo_format_b_ = new QComboBox(this);
+    combo_format_b_->addItems({
+        "YUV420P8", "YUV422P8", "YUV444P8",
+        "YUV420P10LE", "YUV422P10LE", "YUV444P10LE"
+    });
+    connect(combo_format_b_, &QComboBox::currentTextChanged, this, &MainWindow::on_format_b_changed);
+
+    connect(btn_open_a_, &QPushButton::clicked, this, &MainWindow::on_open_a);
+    connect(btn_open_b_, &QPushButton::clicked, this, &MainWindow::on_open_b);
 
     spin_w_ = new QSpinBox(this);
     spin_w_->setRange(1, 16384);
@@ -76,9 +83,11 @@ void MainWindow::build_ui() {
     combo_align_->addItem("LSB (some FFmpeg)", "lsb");
 
     tb1->addWidget(btn_open_a_);
+    tb1->addWidget(new QLabel("Fmt A:", this));
+    tb1->addWidget(combo_format_a_);
     tb1->addWidget(btn_open_b_);
-    tb1->addWidget(new QLabel("Format:", this));
-    tb1->addWidget(combo_format_);
+    tb1->addWidget(new QLabel("Fmt B:", this));
+    tb1->addWidget(combo_format_b_);
     tb1->addWidget(new QLabel("W:", this));
     tb1->addWidget(spin_w_);
     tb1->addWidget(new QLabel("H:", this));
@@ -156,7 +165,7 @@ void MainWindow::build_ui() {
     lbl_metrics_ = new QLabel("—", this);
     statusBar()->addPermanentWidget(lbl_metrics_);
 
-    on_format_changed(combo_format_->currentText());
+    on_format_a_changed(combo_format_a_->currentText());
 }
 
 void MainWindow::build_shortcuts() {
@@ -225,14 +234,15 @@ void MainWindow::open_file(const QString& which) {
     auto auto_fmt = try_parse_format_from_filename(std_path);
     if (auto_fmt.has_value()) {
         std::string fmt_str = to_string(auto_fmt->first) + to_string(auto_fmt->second);
-        int idx = combo_format_->findText(QString::fromStdString(fmt_str));
+        auto combo = (which == "a") ? combo_format_a_ : combo_format_b_;
+        int idx = combo->findText(QString::fromStdString(fmt_str));
         if (idx >= 0) {
-            combo_format_->setCurrentIndex(idx);
+            combo->setCurrentIndex(idx);
         }
     }
 
     try {
-        std::string fmt = combo_format_->currentText().toStdString();
+        std::string fmt = ((which == "a") ? combo_format_a_ : combo_format_b_)->currentText().toStdString();
         int w = spin_w_->value();
         int h = spin_h_->value();
         std::string align = combo_align_->currentData().toString().toStdString();
@@ -251,10 +261,42 @@ void MainWindow::open_file(const QString& which) {
     maybe_load_frame();
 }
 
-void MainWindow::on_format_changed(const QString& fmt) {
-    bool is_10bit = fmt.contains("10LE");
-    lbl_align_->setVisible(is_10bit);
-    combo_align_->setVisible(is_10bit);
+void MainWindow::reload_parser(const QString& which) {
+    if (which == "a" && parser_a_) {
+        try {
+            std::string path = parser_a_->path();
+            std::string fmt = combo_format_a_->currentText().toStdString();
+            int w = spin_w_->value();
+            int h = spin_h_->value();
+            std::string align = combo_align_->currentData().toString().toStdString();
+            parser_a_ = std::make_shared<YUVParser>(path, fmt, w, h, align);
+            maybe_load_frame();
+        } catch (...) {}
+    } else if (which == "b" && parser_b_) {
+        try {
+            std::string path = parser_b_->path();
+            std::string fmt = combo_format_b_->currentText().toStdString();
+            int w = spin_w_->value();
+            int h = spin_h_->value();
+            std::string align = combo_align_->currentData().toString().toStdString();
+            parser_b_ = std::make_shared<YUVParser>(path, fmt, w, h, align);
+            maybe_load_frame();
+        } catch (...) {}
+    }
+}
+
+void MainWindow::on_format_a_changed(const QString& fmt) {
+    bool has_10bit = combo_format_a_->currentText().contains("10LE") || combo_format_b_->currentText().contains("10LE");
+    lbl_align_->setVisible(has_10bit);
+    combo_align_->setVisible(has_10bit);
+    reload_parser("a");
+}
+
+void MainWindow::on_format_b_changed(const QString& fmt) {
+    bool has_10bit = combo_format_a_->currentText().contains("10LE") || combo_format_b_->currentText().contains("10LE");
+    lbl_align_->setVisible(has_10bit);
+    combo_align_->setVisible(has_10bit);
+    reload_parser("b");
 }
 
 void MainWindow::maybe_load_frame() {
@@ -388,7 +430,7 @@ void MainWindow::on_frame_ready(const yuvdiff::FrameReadyData& data) {
                 .arg(label_ch)
                 .arg(fname)
                 .arg(w).arg(h)
-                .arg(combo_format_->currentText())
+                .arg((data.single_channel == "a" ? combo_format_a_ : combo_format_b_)->currentText())
         );
     }
 }

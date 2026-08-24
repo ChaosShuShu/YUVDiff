@@ -667,8 +667,11 @@ void YUVGLWidget::paintGL() {
 
     float max_val = (primary_frame->bit_depth == 8) ? 255.0f : 1023.0f;
     shader_program_->setUniformValue("u_threshold", static_cast<float>(threshold) / max_val);
-    shader_program_->setUniformValue("u_scale_a", 1.0f);
-    shader_program_->setUniformValue("u_scale_b", 1.0f);
+
+    float scale_a = (fa && fa->bit_depth != 8) ? (65535.0f / 1023.0f) : 1.0f;
+    float scale_b = (fb && fb->bit_depth != 8) ? (65535.0f / 1023.0f) : 1.0f;
+    shader_program_->setUniformValue("u_scale_a", scale_a);
+    shader_program_->setUniformValue("u_scale_b", scale_b);
 
     vao_.bind();
     glDrawArrays(GL_TRIANGLES, 0, 6);

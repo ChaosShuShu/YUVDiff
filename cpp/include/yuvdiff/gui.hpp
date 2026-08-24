@@ -34,7 +34,8 @@ public:
 private slots:
     void on_open_a();
     void on_open_b();
-    void on_format_changed(const QString& fmt);
+    void on_format_a_changed(const QString& fmt);
+    void on_format_b_changed(const QString& fmt);
     void on_slider_changed(int idx);
     void on_mode_changed(int index);
     void on_threshold_changed(int val);
@@ -56,6 +57,7 @@ private:
     void build_ui();
     void build_shortcuts();
     void open_file(const QString& which);
+    void reload_parser(const QString& which);
     void maybe_load_frame();
     void request_current_frame();
 
@@ -70,7 +72,8 @@ private:
     // UI Widgets
     QPushButton* btn_open_a_ = nullptr;
     QPushButton* btn_open_b_ = nullptr;
-    QComboBox* combo_format_ = nullptr;
+    QComboBox* combo_format_a_ = nullptr;
+    QComboBox* combo_format_b_ = nullptr;
     QSpinBox* spin_w_ = nullptr;
     QSpinBox* spin_h_ = nullptr;
     QLabel* lbl_align_ = nullptr;

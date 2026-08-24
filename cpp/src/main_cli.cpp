@@ -42,6 +42,8 @@ int main(int argc, char* argv[]) {
     std::string path_a;
     std::string path_b;
     std::string format_str;
+    std::string format_a_str;
+    std::string format_b_str;
     int width = -1;
     int height = -1;
     std::optional<size_t> max_frames;
@@ -58,6 +60,12 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--format") {
             if (++i >= argc) { std::cerr << "yuvdiff: missing value for --format\n"; return 1; }
             format_str = argv[i];
+        } else if (arg == "--format-a") {
+            if (++i >= argc) { std::cerr << "yuvdiff: missing value for --format-a\n"; return 1; }
+            format_a_str = argv[i];
+        } else if (arg == "--format-b") {
+            if (++i >= argc) { std::cerr << "yuvdiff: missing value for --format-b\n"; return 1; }
+            format_b_str = argv[i];
         } else if (arg == "--width") {
             if (++i >= argc) { std::cerr << "yuvdiff: missing value for --width\n"; return 1; }
             width = std::stoi(argv[i]);
@@ -103,44 +111,51 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Try auto-detecting format from filename if not provided
-    if (format_str.empty()) {
-        auto auto_fmt = yuvdiff::try_parse_format_from_filename(path_a);
-        if (auto_fmt.has_value()) {
-            format_str = yuvdiff::to_string(auto_fmt->first) + yuvdiff::to_string(auto_fmt->second);
-            std::cerr << "# Auto-detected format: " << format_str << "\n";
+    // Try auto-detecting format A from filename if not provided
+    if (format_a_str.empty()) {
+        if (!format_str.empty()) {
+            format_a_str = format_str;
+        } else {
+            auto auto_fmt = yuvdiff::try_parse_format_from_filename(path_a);
+            if (auto_fmt.has_value()) {
+                format_a_str = yuvdiff::to_string(auto_fmt->first) + yuvdiff::to_string(auto_fmt->second);
+                std::cerr << "# Auto-detected format A: " << format_a_str << "\n";
+            }
         }
     }
 
-    if (format_str.empty() || width <= 0 || height <= 0) {
-        std::cerr << "yuvdiff: missing required arguments (--format, --width, --height)\n";
+    // Try auto-detecting format B from filename if not provided
+    if (!path_b.empty() && format_b_str.empty()) {
+        if (!format_str.empty()) {
+            format_b_str = format_str;
+        } else {
+            auto auto_fmt = yuvdiff::try_parse_format_from_filename(path_b);
+            if (auto_fmt.has_value()) {
+                format_b_str = yuvdiff::to_string(auto_fmt->first) + yuvdiff::to_string(auto_fmt->second);
+                std::cerr << "# Auto-detected format B: " << format_b_str << "\n";
+            } else {
+                format_b_str = format_a_str;
+            }
+        }
+    }
+
+    if (format_a_str.empty() || width <= 0 || height <= 0) {
+        std::cerr << "yuvdiff: missing required arguments (--format / --format-a, --width, --height)\n";
         print_usage(argv[0]);
         return 1;
     }
 
-    yuvdiff::BitDepth bit_depth;
-    try {
-        auto [p_fmt, b_depth] = yuvdiff::parse_format(format_str);
-        (void)p_fmt;
-        bit_depth = b_depth;
-    } catch (const std::exception& e) {
-        std::cerr << "yuvdiff: " << e.what() << "\n";
-        return 1;
-    }
-
-    std::string align_arg = (bit_depth == yuvdiff::BitDepth::BIT10LE) ? align_str : "msb";
-
     // Single Video CLI Inspection Mode
     if (positionals.size() == 1) {
         try {
-            yuvdiff::YUVParser parser(path_a, format_str, width, height, align_arg);
+            yuvdiff::YUVParser parser(path_a, format_a_str, width, height, align_str);
             std::cout << "=== YUV Video Info ===\n"
                       << "File: " << path_a << "\n"
-                      << "Format: " << format_str << "\n"
+                      << "Format: " << format_a_str << "\n"
                       << "Resolution: " << width << "x" << height << "\n"
                       << "Bit Depth: " << yuvdiff::to_string(parser.bit_depth()) << "\n"
                       << "Total Frames: " << parser.num_frames() << "\n";
-            if (bit_depth == yuvdiff::BitDepth::BIT10LE) {
+            if (parser.bit_depth() == yuvdiff::BitDepth::BIT10LE) {
                 std::cout << "Alignment: " << yuvdiff::to_string(parser.bit_alignment()) << "\n";
             }
             return 0;
@@ -155,15 +170,15 @@ int main(int argc, char* argv[]) {
     std::unique_ptr<yuvdiff::YUVParser> parser_b;
 
     try {
-        parser_a = std::make_unique<yuvdiff::YUVParser>(path_a, format_str, width, height, align_arg);
-        parser_b = std::make_unique<yuvdiff::YUVParser>(path_b, format_str, width, height, align_arg);
+        parser_a = std::make_unique<yuvdiff::YUVParser>(path_a, format_a_str, width, height, align_str);
+        parser_b = std::make_unique<yuvdiff::YUVParser>(path_b, format_b_str, width, height, align_str);
     } catch (const std::exception& e) {
         std::cerr << "yuvdiff: " << e.what() << "\n";
         return 2;
     }
 
-    if (align_str == "auto" && bit_depth == yuvdiff::BitDepth::BIT10LE) {
-        std::cerr << "# 10-bit alignment auto-detected: "
+    if (align_str == "auto" && parser_a->bit_depth() == yuvdiff::BitDepth::BIT10LE) {
+        std::cerr << "# 10-bit alignment auto-detected for A: "
                   << yuvdiff::to_string(parser_a->bit_alignment()) << "\n";
     }
 

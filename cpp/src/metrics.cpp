@@ -75,10 +75,18 @@ void uniform_filter_2d(
 }
 
 double compute_channel_mse(const YUVFrame& a, const YUVFrame& b, char channel) {
-    int w = (channel == 'y') ? a.width : a.chroma_width();
-    int h = (channel == 'y') ? a.height : a.chroma_height();
+    auto [hf_a, vf_a] = chroma_subsampling(a.pixel_format);
+    auto [hf_b, vf_b] = chroma_subsampling(b.pixel_format);
+
+    int hf = std::min(hf_a, hf_b);
+    int vf = std::min(vf_a, vf_b);
+    int w = (channel == 'y') ? a.width : (a.width / hf);
+    int h = (channel == 'y') ? a.height : (a.height / vf);
     size_t total = static_cast<size_t>(w) * h;
     if (total == 0) return 0.0;
+
+    double scale_a = (a.bit_depth == 8 && b.bit_depth == 10) ? 4.0 : 1.0;
+    double scale_b = (b.bit_depth == 8 && a.bit_depth == 10) ? 4.0 : 1.0;
 
     double sum_sq_diff = 0.0;
     for (int r = 0; r < h; ++r) {
@@ -86,14 +94,16 @@ double compute_channel_mse(const YUVFrame& a, const YUVFrame& b, char channel) {
             double val_a = 0.0;
             double val_b = 0.0;
             if (channel == 'y') {
-                val_a = a.get_y(r, c);
-                val_b = b.get_y(r, c);
+                val_a = a.get_y(r, c) * scale_a;
+                val_b = b.get_y(r, c) * scale_b;
             } else if (channel == 'u') {
-                val_a = a.get_u(r, c);
-                val_b = b.get_u(r, c);
+                int vr = r * vf; int vc = c * hf;
+                val_a = a.get_u(vr / vf_a, vc / hf_a) * scale_a;
+                val_b = b.get_u(vr / vf_b, vc / hf_b) * scale_b;
             } else {
-                val_a = a.get_v(r, c);
-                val_b = b.get_v(r, c);
+                int vr = r * vf; int vc = c * hf;
+                val_a = a.get_v(vr / vf_a, vc / hf_a) * scale_a;
+                val_b = b.get_v(vr / vf_b, vc / hf_b) * scale_b;
             }
             double diff = val_a - val_b;
             sum_sq_diff += diff * diff;
@@ -115,11 +125,8 @@ PSNRResult MetricsCalculator::psnr(const YUVFrame& a, const YUVFrame& b) const {
     if (a.width != b.width || a.height != b.height) {
         throw std::invalid_argument("Frame size mismatch");
     }
-    if (a.bit_depth != b.bit_depth) {
-        throw std::invalid_argument("Bit depth mismatch");
-    }
 
-    double max_val = (a.bit_depth == 8) ? 255.0 : 1023.0;
+    double max_val = (a.bit_depth == 10 || b.bit_depth == 10) ? 1023.0 : 255.0;
 
     double mse_y = compute_channel_mse(a, b, 'y');
     double mse_u = compute_channel_mse(a, b, 'u');
@@ -134,9 +141,9 @@ PSNRResult MetricsCalculator::psnr(const YUVFrame& a, const YUVFrame& b) const {
     // YUV422: 2:1:1
     // YUV444: 1:1:1
     double yw = 1.0, uw = 1.0, vw = 1.0;
-    if (a.pixel_format == PixelFormat::YUV420P) {
+    if (a.pixel_format == PixelFormat::YUV420P || b.pixel_format == PixelFormat::YUV420P) {
         yw = 4.0;
-    } else if (a.pixel_format == PixelFormat::YUV422P) {
+    } else if (a.pixel_format == PixelFormat::YUV422P || b.pixel_format == PixelFormat::YUV422P) {
         yw = 2.0;
     }
 
@@ -150,16 +157,16 @@ SSIMResult MetricsCalculator::ssim(const YUVFrame& a, const YUVFrame& b) const {
     if (a.width != b.width || a.height != b.height) {
         throw std::invalid_argument("Frame size mismatch");
     }
-    if (a.bit_depth != b.bit_depth) {
-        throw std::invalid_argument("Bit depth mismatch");
-    }
 
     int w = a.width;
     int h = a.height;
     size_t total = static_cast<size_t>(w) * h;
     if (total == 0) return {1.0};
 
-    double max_val = (a.bit_depth == 8) ? 255.0 : 1023.0;
+    double max_val = (a.bit_depth == 10 || b.bit_depth == 10) ? 1023.0 : 255.0;
+    double scale_a = (a.bit_depth == 8 && b.bit_depth == 10) ? 4.0 : 1.0;
+    double scale_b = (b.bit_depth == 8 && a.bit_depth == 10) ? 4.0 : 1.0;
+
     double c1 = (0.01 * max_val) * (0.01 * max_val);
     double c2 = (0.03 * max_val) * (0.03 * max_val);
 
@@ -174,7 +181,7 @@ SSIMResult MetricsCalculator::ssim(const YUVFrame& a, const YUVFrame& b) const {
     // 1. mu_a = E[A]
     for (int r = 0; r < h; ++r) {
         for (int c = 0; c < w; ++c) {
-            buf_in[r * w + c] = static_cast<double>(a.get_y(r, c));
+            buf_in[r * w + c] = static_cast<double>(a.get_y(r, c)) * scale_a;
         }
     }
     uniform_filter_2d(buf_in.data(), mu_a.data(), temp.data(), h, w, 11);
@@ -188,7 +195,7 @@ SSIMResult MetricsCalculator::ssim(const YUVFrame& a, const YUVFrame& b) const {
     // 3. mu_b = E[B]
     for (int r = 0; r < h; ++r) {
         for (int c = 0; c < w; ++c) {
-            buf_in[r * w + c] = static_cast<double>(b.get_y(r, c));
+            buf_in[r * w + c] = static_cast<double>(b.get_y(r, c)) * scale_b;
         }
     }
     uniform_filter_2d(buf_in.data(), mu_b.data(), temp.data(), h, w, 11);
@@ -202,7 +209,8 @@ SSIMResult MetricsCalculator::ssim(const YUVFrame& a, const YUVFrame& b) const {
     // 5. E[AB]
     for (int r = 0; r < h; ++r) {
         for (int c = 0; c < w; ++c) {
-            buf_in[r * w + c] = static_cast<double>(a.get_y(r, c)) * static_cast<double>(b.get_y(r, c));
+            buf_in[r * w + c] = (static_cast<double>(a.get_y(r, c)) * scale_a) *
+                               (static_cast<double>(b.get_y(r, c)) * scale_b);
         }
     }
     uniform_filter_2d(buf_in.data(), sigma_ab.data(), temp.data(), h, w, 11);
