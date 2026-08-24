@@ -118,3 +118,32 @@ TEST_CASE(test_renderer_threshold_mask) {
     ASSERT_EQ(bot_g, 100);
     ASSERT_EQ(bot_b, 100);
 }
+
+#include "yuvdiff/cache.hpp"
+
+TEST_CASE(test_frame_cache_lru) {
+    FrameCache cache(3); // Capacity 3
+
+    CachedFrame f1; f1.frame_idx = 1; f1.mode = RenderMode::ORIGINAL_A; f1.threshold = 4;
+    CachedFrame f2; f2.frame_idx = 2; f2.mode = RenderMode::ORIGINAL_A; f2.threshold = 4;
+    CachedFrame f3; f3.frame_idx = 3; f3.mode = RenderMode::ORIGINAL_A; f3.threshold = 4;
+    CachedFrame f4; f4.frame_idx = 4; f4.mode = RenderMode::ORIGINAL_A; f4.threshold = 4;
+
+    cache.put(f1);
+    cache.put(f2);
+    cache.put(f3);
+
+    ASSERT_EQ(cache.size(), 3ULL);
+    ASSERT_TRUE(cache.get(1, RenderMode::ORIGINAL_A, 4).has_value());
+
+    // Insert 4th item -> should evict item 2 (because item 1 was just accessed, so 2 is oldest)
+    cache.put(f4);
+    ASSERT_EQ(cache.size(), 3ULL);
+    ASSERT_TRUE(cache.get(1, RenderMode::ORIGINAL_A, 4).has_value());
+    ASSERT_FALSE(cache.get(2, RenderMode::ORIGINAL_A, 4).has_value()); // Evicted!
+    ASSERT_TRUE(cache.get(3, RenderMode::ORIGINAL_A, 4).has_value());
+    ASSERT_TRUE(cache.get(4, RenderMode::ORIGINAL_A, 4).has_value());
+
+    cache.clear();
+    ASSERT_EQ(cache.size(), 0ULL);
+}

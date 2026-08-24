@@ -98,7 +98,7 @@ class TestRendererThresholdMask:
         img = r.render(a, b, diff, RenderMode.THRESHOLD_MASK, threshold=4)
         assert img.width() == 16
         top_pixel = img.pixelColor(4, 4)
-        bottom_pixel = img.pixelColor(12, 4)
+        bottom_pixel = img.pixelColor(4, 12)
         assert top_pixel.red() > top_pixel.green()
         assert top_pixel.red() > top_pixel.blue()
         assert abs(bottom_pixel.red() - bottom_pixel.blue()) < 30

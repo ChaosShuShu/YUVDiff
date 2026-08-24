@@ -4,7 +4,11 @@
 #include "yuvdiff/formats.hpp"
 #include "yuvdiff/metrics.hpp"
 #include "yuvdiff/parser.hpp"
+#include "yuvdiff/gl_widget.hpp"
+#include "yuvdiff/metrics.hpp"
+#include "yuvdiff/parser.hpp"
 #include "yuvdiff/renderer.hpp"
+#include "yuvdiff/worker.hpp"
 
 #include <QMainWindow>
 #include <QTimer>
@@ -40,22 +44,26 @@ private slots:
     void on_export_all();
     void step_frame(int delta);
 
+    // Worker slots
+    void on_frame_ready(const yuvdiff::FrameReadyData& data);
+    void on_render_error(int frame_idx, const QString& error_msg);
+
+    // Pixel inspector slots
+    void on_pixel_hovered(const yuvdiff::PixelInfo& info);
+    void on_pixel_leave();
+
 private:
     void build_ui();
     void build_shortcuts();
     void open_file(const QString& which);
     void maybe_load_frame();
-    void show_frame(int idx);
-    void update_metrics(const DiffResult& diff);
+    void request_current_frame();
 
     // State
-    std::unique_ptr<YUVParser> parser_a_;
-    std::unique_ptr<YUVParser> parser_b_;
-    std::optional<YUVFrame> frame_a_;
-    std::optional<YUVFrame> frame_b_;
-    std::unique_ptr<Renderer> renderer_;
-    DiffEngine diff_engine_{4};
-    MetricsCalculator metrics_calc_;
+    std::shared_ptr<YUVParser> parser_a_;
+    std::shared_ptr<YUVParser> parser_b_;
+    std::shared_ptr<Renderer> renderer_;
+    std::unique_ptr<AsyncRenderWorker> worker_;
 
     QTimer* play_timer_ = nullptr;
 
@@ -78,7 +86,8 @@ private:
     QSlider* slider_ = nullptr;
     QSpinBox* spin_frame_ = nullptr;
 
-    QLabel* canvas_ = nullptr;
+    YUVGLWidget* canvas_ = nullptr;
+    QLabel* lbl_pixel_info_ = nullptr;
     QLabel* lbl_metrics_ = nullptr;
 };
 

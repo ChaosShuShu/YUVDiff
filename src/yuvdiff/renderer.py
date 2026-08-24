@@ -119,9 +119,10 @@ class Renderer:
     def _heatmap_to_qimage(self, diff, frame: YUVFrame) -> "QImage":
         max_val = 255 if frame.bit_depth == 8 else 1023
         norm = np.clip(diff.diff_y.astype(np.float64) / max_val, 0.0, 1.0)
-        r = np.where(norm < 0.5, 0.0, (norm - 0.5) * 2 * 255)
-        g = np.where(norm < 0.5, norm * 2 * 255, (1.0 - (norm - 0.5) * 2) * 255)
-        b = np.where(norm < 0.5, 255 - norm * 2 * 255, 0.0)
+        # 0 error -> Gray (128, 128, 128), Max error -> Pure Red (255, 0, 0)
+        r = 128.0 + 127.0 * norm
+        g = 128.0 * (1.0 - norm)
+        b = 128.0 * (1.0 - norm)
         rgb = np.stack([r, g, b], axis=-1).astype(np.uint8)
         h, w = rgb.shape[:2]
         return QImage(rgb.data, w, h, w * 3, QImage.Format_RGB888).copy()

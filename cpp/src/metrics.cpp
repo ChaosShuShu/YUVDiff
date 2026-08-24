@@ -21,37 +21,57 @@ inline int reflect_index(int idx, int len) {
     return idx;
 }
 
-// 2D box filter (uniform filter) with 11x11 window and reflection boundary
-std::vector<double> uniform_filter_2d(const std::vector<double>& input, int h, int w, int size = 11) {
+// O(1) sliding-window 2D box filter with reflection boundary
+void uniform_filter_2d(
+    const double* input,
+    double* output,
+    double* temp,
+    int h,
+    int w,
+    int size = 11
+) {
     int radius = size / 2;
-    std::vector<double> temp(h * w, 0.0);
-    std::vector<double> output(h * w, 0.0);
+    double inv_size = 1.0 / size;
 
     // Horizontal pass
     for (int r = 0; r < h; ++r) {
-        for (int c = 0; c < w; ++c) {
-            double sum = 0.0;
-            for (int k = -radius; k <= radius; ++k) {
-                int sc = reflect_index(c + k, w);
-                sum += input[r * w + sc];
-            }
-            temp[r * w + c] = sum / size;
+        const double* in_row = input + r * w;
+        double* tmp_row = temp + r * w;
+
+        // Initialize sliding sum for c = 0 (window [-radius, +radius])
+        double sum = 0.0;
+        for (int k = -radius; k <= radius; ++k) {
+            sum += in_row[reflect_index(k, w)];
+        }
+        tmp_row[0] = sum * inv_size;
+
+        // Slide window horizontally across row
+        for (int c = 1; c < w; ++c) {
+            int in_idx = reflect_index(c + radius, w);
+            int out_idx = reflect_index(c - radius - 1, w);
+            sum += in_row[in_idx] - in_row[out_idx];
+            tmp_row[c] = sum * inv_size;
         }
     }
 
     // Vertical pass
-    for (int r = 0; r < h; ++r) {
-        for (int c = 0; c < w; ++c) {
-            double sum = 0.0;
-            for (int k = -radius; k <= radius; ++k) {
-                int sr = reflect_index(r + k, h);
-                sum += temp[sr * w + c];
-            }
-            output[r * w + c] = sum / size;
+    for (int c = 0; c < w; ++c) {
+        // Initialize sliding sum for r = 0 (window [-radius, +radius])
+        double sum = 0.0;
+        for (int k = -radius; k <= radius; ++k) {
+            int sr = reflect_index(k, h);
+            sum += temp[sr * w + c];
+        }
+        output[0 * w + c] = sum * inv_size;
+
+        // Slide window vertically down column
+        for (int r = 1; r < h; ++r) {
+            int in_r = reflect_index(r + radius, h);
+            int out_r = reflect_index(r - radius - 1, h);
+            sum += temp[in_r * w + c] - temp[out_r * w + c];
+            output[r * w + c] = sum * inv_size;
         }
     }
-
-    return output;
 }
 
 double compute_channel_mse(const YUVFrame& a, const YUVFrame& b, char channel) {
@@ -143,30 +163,49 @@ SSIMResult MetricsCalculator::ssim(const YUVFrame& a, const YUVFrame& b) const {
     double c1 = (0.01 * max_val) * (0.01 * max_val);
     double c2 = (0.03 * max_val) * (0.03 * max_val);
 
-    std::vector<double> a_f(total);
-    std::vector<double> b_f(total);
-    std::vector<double> a_sq(total);
-    std::vector<double> b_sq(total);
-    std::vector<double> ab(total);
+    std::vector<double> buf_in(total);
+    std::vector<double> temp(total);
+    std::vector<double> mu_a(total);
+    std::vector<double> mu_b(total);
+    std::vector<double> sigma_a_sq(total);
+    std::vector<double> sigma_b_sq(total);
+    std::vector<double> sigma_ab(total);
 
+    // 1. mu_a = E[A]
     for (int r = 0; r < h; ++r) {
         for (int c = 0; c < w; ++c) {
-            size_t idx = static_cast<size_t>(r) * w + c;
-            double va = a.get_y(r, c);
-            double vb = b.get_y(r, c);
-            a_f[idx] = va;
-            b_f[idx] = vb;
-            a_sq[idx] = va * va;
-            b_sq[idx] = vb * vb;
-            ab[idx] = va * vb;
+            buf_in[r * w + c] = static_cast<double>(a.get_y(r, c));
         }
     }
+    uniform_filter_2d(buf_in.data(), mu_a.data(), temp.data(), h, w, 11);
 
-    std::vector<double> mu_a = uniform_filter_2d(a_f, h, w, 11);
-    std::vector<double> mu_b = uniform_filter_2d(b_f, h, w, 11);
-    std::vector<double> sigma_a_sq = uniform_filter_2d(a_sq, h, w, 11);
-    std::vector<double> sigma_b_sq = uniform_filter_2d(b_sq, h, w, 11);
-    std::vector<double> sigma_ab = uniform_filter_2d(ab, h, w, 11);
+    // 2. E[A^2]
+    for (size_t i = 0; i < total; ++i) {
+        buf_in[i] = buf_in[i] * buf_in[i];
+    }
+    uniform_filter_2d(buf_in.data(), sigma_a_sq.data(), temp.data(), h, w, 11);
+
+    // 3. mu_b = E[B]
+    for (int r = 0; r < h; ++r) {
+        for (int c = 0; c < w; ++c) {
+            buf_in[r * w + c] = static_cast<double>(b.get_y(r, c));
+        }
+    }
+    uniform_filter_2d(buf_in.data(), mu_b.data(), temp.data(), h, w, 11);
+
+    // 4. E[B^2]
+    for (size_t i = 0; i < total; ++i) {
+        buf_in[i] = buf_in[i] * buf_in[i];
+    }
+    uniform_filter_2d(buf_in.data(), sigma_b_sq.data(), temp.data(), h, w, 11);
+
+    // 5. E[AB]
+    for (int r = 0; r < h; ++r) {
+        for (int c = 0; c < w; ++c) {
+            buf_in[r * w + c] = static_cast<double>(a.get_y(r, c)) * static_cast<double>(b.get_y(r, c));
+        }
+    }
+    uniform_filter_2d(buf_in.data(), sigma_ab.data(), temp.data(), h, w, 11);
 
     double sum_ssim = 0.0;
     for (size_t i = 0; i < total; ++i) {

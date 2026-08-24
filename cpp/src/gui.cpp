@@ -22,6 +22,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle("YUVdiff");
     resize(1280, 800);
 
+    worker_ = std::make_unique<AsyncRenderWorker>(this);
+    connect(worker_.get(), &AsyncRenderWorker::frameReady, this, &MainWindow::on_frame_ready, Qt::QueuedConnection);
+    connect(worker_.get(), &AsyncRenderWorker::renderError, this, &MainWindow::on_render_error, Qt::QueuedConnection);
+
     play_timer_ = new QTimer(this);
     connect(play_timer_, &QTimer::timeout, this, &MainWindow::on_play_tick);
 
@@ -32,6 +36,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 MainWindow::~MainWindow() {
     if (play_timer_->isActive()) {
         play_timer_->stop();
+    }
+    if (worker_) {
+        worker_->stop();
     }
 }
 
@@ -135,14 +142,17 @@ void MainWindow::build_ui() {
     fr->addWidget(spin_frame_);
     root->addLayout(fr);
 
-    // Canvas
-    canvas_ = new QLabel("Open A and B to begin.", this);
-    canvas_->setAlignment(Qt::AlignCenter);
-    canvas_->setMinimumSize(640, 360);
-    canvas_->setStyleSheet("background: #222; color: #888;");
+    // Canvas (OpenGL GPU Accelerated)
+    canvas_ = new YUVGLWidget(this);
+    connect(canvas_, &YUVGLWidget::pixelHovered, this, &MainWindow::on_pixel_hovered);
+    connect(canvas_, &YUVGLWidget::pixelLeave, this, &MainWindow::on_pixel_leave);
     root->addWidget(canvas_, 1);
 
     // Status bar
+    lbl_pixel_info_ = new QLabel("Pos: —", this);
+    lbl_pixel_info_->setStyleSheet("padding-right: 20px; color: #409eff; font-weight: bold;");
+    statusBar()->addWidget(lbl_pixel_info_);
+
     lbl_metrics_ = new QLabel("—", this);
     statusBar()->addPermanentWidget(lbl_metrics_);
 
@@ -178,6 +188,14 @@ void MainWindow::build_shortcuts() {
     act_right->setShortcut(QKeySequence(Qt::Key_Right));
     connect(act_right, &QAction::triggered, this, [this]() { step_frame(1); });
     addAction(act_right);
+
+    // R to reset zoom and pan
+    QAction* act_reset = new QAction(this);
+    act_reset->setShortcut(QKeySequence(Qt::Key_R));
+    connect(act_reset, &QAction::triggered, this, [this]() {
+        if (canvas_) canvas_->reset_zoom_pan();
+    });
+    addAction(act_reset);
 }
 
 void MainWindow::on_open_a() {
@@ -219,11 +237,11 @@ void MainWindow::open_file(const QString& which) {
         int h = spin_h_->value();
         std::string align = combo_align_->currentData().toString().toStdString();
 
-        auto parser = std::make_unique<YUVParser>(std_path, fmt, w, h, align);
+        auto parser = std::make_shared<YUVParser>(std_path, fmt, w, h, align);
         if (which == "a") {
-            parser_a_ = std::move(parser);
+            parser_a_ = parser;
         } else {
-            parser_b_ = std::move(parser);
+            parser_b_ = parser;
         }
     } catch (const std::exception& e) {
         QMessageBox::critical(this, "Open failed", e.what());
@@ -257,39 +275,54 @@ void MainWindow::maybe_load_frame() {
         slider_->setRange(0, std::max(0, n - 1));
         spin_frame_->setRange(0, std::max(0, n - 1));
 
-        renderer_ = std::make_unique<Renderer>(parser_a_->width(), parser_a_->height());
-        show_frame(0);
+        renderer_ = std::make_shared<Renderer>(parser_a_->width(), parser_a_->height());
     } else if (parser_a_) { // Single Video A
         int n = static_cast<int>(parser_a_->num_frames());
         slider_->setRange(0, std::max(0, n - 1));
         spin_frame_->setRange(0, std::max(0, n - 1));
 
         combo_mode_->setCurrentIndex(0); // ORIGINAL_A
-        renderer_ = std::make_unique<Renderer>(parser_a_->width(), parser_a_->height());
-        show_frame(0);
+        renderer_ = std::make_shared<Renderer>(parser_a_->width(), parser_a_->height());
     } else if (parser_b_) { // Single Video B
         int n = static_cast<int>(parser_b_->num_frames());
         slider_->setRange(0, std::max(0, n - 1));
         spin_frame_->setRange(0, std::max(0, n - 1));
 
         combo_mode_->setCurrentIndex(1); // ORIGINAL_B
-        renderer_ = std::make_unique<Renderer>(parser_b_->width(), parser_b_->height());
-        show_frame(0);
+        renderer_ = std::make_shared<Renderer>(parser_b_->width(), parser_b_->height());
     }
+
+    worker_->set_parsers(parser_a_, parser_b_, renderer_);
+    request_current_frame();
 }
 
 void MainWindow::on_slider_changed(int idx) {
-    show_frame(idx);
+    (void)idx;
+    request_current_frame();
 }
 
 void MainWindow::on_mode_changed(int index) {
     (void)index;
-    show_frame(slider_->value());
+    request_current_frame();
 }
 
 void MainWindow::on_threshold_changed(int val) {
-    diff_engine_.set_threshold(val);
-    show_frame(slider_->value());
+    (void)val;
+    if (worker_) {
+        worker_->clear_cache();
+    }
+    request_current_frame();
+}
+
+void MainWindow::request_current_frame() {
+    if (!renderer_ || (!parser_a_ && !parser_b_)) return;
+
+    int idx = slider_->value();
+    RenderMode mode = static_cast<RenderMode>(combo_mode_->currentData().toInt());
+    int threshold = spin_threshold_->value();
+    bool is_playing = btn_play_->isChecked();
+
+    worker_->request_frame(idx, mode, threshold, is_playing);
 }
 
 void MainWindow::on_play_toggled(bool checked) {
@@ -317,115 +350,96 @@ void MainWindow::step_frame(int delta) {
     slider_->setValue(next_val);
 }
 
-void MainWindow::show_frame(int idx) {
-    if (!renderer_) return;
+void MainWindow::on_frame_ready(const yuvdiff::FrameReadyData& data) {
+    if (!data.frame_a && !data.frame_b) return;
 
-    // Both videos loaded: Dual Diff Mode
-    if (parser_a_ && parser_b_) {
-        try {
-            frame_a_ = parser_a_->read_frame(static_cast<size_t>(idx));
-            frame_b_ = parser_b_->read_frame(static_cast<size_t>(idx));
-        } catch (const std::exception& e) {
-            QMessageBox::critical(this, "Read failed", e.what());
-            return;
+    canvas_->set_frames(data.frame_a, data.frame_b, data.mode, data.threshold);
+
+    int n = slider_->maximum() + 1;
+    if (data.is_dual) {
+        double pct = (data.total_pixels > 0)
+            ? (100.0 * data.diff_pixels / data.total_pixels)
+            : 0.0;
+
+        QString align_info = "";
+        if (parser_a_ && parser_a_->bit_depth() == BitDepth::BIT10LE) {
+            align_info = QString("  |  Align=%1").arg(QString::fromStdString(to_string(parser_a_->bit_alignment())));
         }
 
-        diff_engine_.set_threshold(spin_threshold_->value());
-        DiffResult diff = diff_engine_.diff(*frame_a_, *frame_b_);
+        std::ostringstream oss;
+        oss << "Frame " << data.frame_idx << "/" << (n - 1) << "  |  "
+            << std::fixed << std::setprecision(2)
+            << "PSNR Y=" << data.psnr.y << " U=" << data.psnr.u << " V=" << data.psnr.v << " T=" << data.psnr.total << "  |  "
+            << std::setprecision(4) << "SSIM Y=" << data.ssim.y << "  |  "
+            << std::setprecision(2) << "Diff: " << pct << "% (" << data.diff_pixels << "/" << data.total_pixels << ")"
+            << align_info.toStdString();
 
-        RenderMode mode = static_cast<RenderMode>(combo_mode_->currentData().toInt());
-        RgbImage rgb = renderer_->render(*frame_a_, &(*frame_b_), &diff, mode, spin_threshold_->value());
+        lbl_metrics_->setText(QString::fromStdString(oss.str()));
+    } else {
+        auto& parser = (data.single_channel == "a") ? parser_a_ : parser_b_;
+        QString label_ch = (data.single_channel == "a") ? "A" : "B";
+        QString fname = parser ? QFileInfo(QString::fromStdString(parser->path())).fileName() : "";
+        int w = parser ? parser->width() : 0;
+        int h = parser ? parser->height() : 0;
 
-        QImage qimg(rgb.data.data(), rgb.width, rgb.height, rgb.width * 3, QImage::Format_RGB888);
-        canvas_->setPixmap(QPixmap::fromImage(qimg));
-
-        update_metrics(diff);
-    }
-    // Single Video A Mode
-    else if (parser_a_) {
-        try {
-            frame_a_ = parser_a_->read_frame(static_cast<size_t>(idx));
-        } catch (const std::exception& e) {
-            QMessageBox::critical(this, "Read failed", e.what());
-            return;
-        }
-
-        RgbImage rgb = renderer_->yuv_to_rgb(*frame_a_);
-        QImage qimg(rgb.data.data(), rgb.width, rgb.height, rgb.width * 3, QImage::Format_RGB888);
-        canvas_->setPixmap(QPixmap::fromImage(qimg));
-
-        QString fname = QFileInfo(QString::fromStdString(parser_a_->path())).fileName();
-        int n = slider_->maximum() + 1;
         lbl_metrics_->setText(
-            QString("Frame %1/%2  |  Single Video A: %3  |  %4x%5 %6")
-                .arg(idx).arg(n - 1)
+            QString("Frame %1/%2  |  Single Video %3: %4  |  %5x%6 %7")
+                .arg(data.frame_idx).arg(n - 1)
+                .arg(label_ch)
                 .arg(fname)
-                .arg(parser_a_->width()).arg(parser_a_->height())
-                .arg(combo_format_->currentText())
-        );
-    }
-    // Single Video B Mode
-    else if (parser_b_) {
-        try {
-            frame_b_ = parser_b_->read_frame(static_cast<size_t>(idx));
-        } catch (const std::exception& e) {
-            QMessageBox::critical(this, "Read failed", e.what());
-            return;
-        }
-
-        RgbImage rgb = renderer_->yuv_to_rgb(*frame_b_);
-        QImage qimg(rgb.data.data(), rgb.width, rgb.height, rgb.width * 3, QImage::Format_RGB888);
-        canvas_->setPixmap(QPixmap::fromImage(qimg));
-
-        QString fname = QFileInfo(QString::fromStdString(parser_b_->path())).fileName();
-        int n = slider_->maximum() + 1;
-        lbl_metrics_->setText(
-            QString("Frame %1/%2  |  Single Video B: %3  |  %4x%5 %6")
-                .arg(idx).arg(n - 1)
-                .arg(fname)
-                .arg(parser_b_->width()).arg(parser_b_->height())
+                .arg(w).arg(h)
                 .arg(combo_format_->currentText())
         );
     }
 }
 
-void MainWindow::update_metrics(const DiffResult& diff) {
-    if (!frame_a_ || !frame_b_) return;
+void MainWindow::on_render_error(int frame_idx, const QString& error_msg) {
+    statusBar()->showMessage(QString("Frame %1 render error: %2").arg(frame_idx).arg(error_msg), 4000);
+}
 
-    PSNRResult psnr = metrics_calc_.psnr(*frame_a_, *frame_b_);
-    SSIMResult ssim = metrics_calc_.ssim(*frame_a_, *frame_b_);
-
-    int n = slider_->maximum() + 1;
-    int idx = slider_->value();
-    double pct = (diff.total_pixel_count > 0)
-        ? (100.0 * diff.diff_pixel_count / diff.total_pixel_count)
-        : 0.0;
-
-    QString align_info = "";
-    if (parser_a_ && parser_a_->bit_depth() == BitDepth::BIT10LE) {
-        align_info = QString("  |  Align=%1").arg(QString::fromStdString(to_string(parser_a_->bit_alignment())));
+void MainWindow::on_pixel_hovered(const yuvdiff::PixelInfo& info) {
+    if (info.x < 0 || info.y < 0) {
+        on_pixel_leave();
+        return;
     }
 
-    std::ostringstream oss;
-    oss << "Frame " << idx << "/" << (n - 1) << "  |  "
-        << std::fixed << std::setprecision(2)
-        << "PSNR Y=" << psnr.y << " U=" << psnr.u << " V=" << psnr.v << " T=" << psnr.total << "  |  "
-        << std::setprecision(4) << "SSIM Y=" << ssim.y << "  |  "
-        << std::setprecision(2) << "Diff: " << pct << "% (" << diff.diff_pixel_count << "/" << diff.total_pixel_count << ")"
-        << align_info.toStdString();
+    if (info.has_a && info.has_b) {
+        lbl_pixel_info_->setText(
+            QString("Pos: (%1, %2)  |  A: Y=%3 U=%4 V=%5  |  B: Y=%6 U=%7 V=%8  |  ΔY=%9")
+                .arg(info.x).arg(info.y)
+                .arg(info.y_a).arg(info.u_a).arg(info.v_a)
+                .arg(info.y_b).arg(info.u_b).arg(info.v_b)
+                .arg(info.diff_y)
+        );
+    } else if (info.has_a) {
+        lbl_pixel_info_->setText(
+            QString("Pos: (%1, %2)  |  Video A: Y=%3 U=%4 V=%5")
+                .arg(info.x).arg(info.y)
+                .arg(info.y_a).arg(info.u_a).arg(info.v_a)
+        );
+    } else if (info.has_b) {
+        lbl_pixel_info_->setText(
+            QString("Pos: (%1, %2)  |  Video B: Y=%3 U=%4 V=%5")
+                .arg(info.x).arg(info.y)
+                .arg(info.y_b).arg(info.u_b).arg(info.v_b)
+        );
+    }
+}
 
-    lbl_metrics_->setText(QString::fromStdString(oss.str()));
+void MainWindow::on_pixel_leave() {
+    lbl_pixel_info_->setText("Pos: —");
 }
 
 void MainWindow::on_export_current() {
-    if (canvas_->pixmap().isNull()) return;
+    QImage img = canvas_->grabFramebuffer();
+    if (img.isNull()) return;
 
     QString path = QFileDialog::getSaveFileName(
         this, "Save current frame", "frame.png", "PNG (*.png)"
     );
     if (path.isEmpty()) return;
 
-    canvas_->pixmap().save(path, "PNG");
+    img.save(path, "PNG");
 }
 
 void MainWindow::on_export_all() {
@@ -434,21 +448,28 @@ void MainWindow::on_export_all() {
     QString out_dir = QFileDialog::getExistingDirectory(this, "Choose output directory");
     if (out_dir.isEmpty()) return;
 
+    DiffEngine diff_engine(spin_threshold_->value());
+    RenderMode mode = static_cast<RenderMode>(combo_mode_->currentData().toInt());
+    int threshold = spin_threshold_->value();
+
     if (parser_a_ && parser_b_) {
         QString a_base = QFileInfo(QString::fromStdString(parser_a_->path())).baseName();
         QString b_base = QFileInfo(QString::fromStdString(parser_b_->path())).baseName();
         int n = static_cast<int>(std::min(parser_a_->num_frames(), parser_b_->num_frames()));
 
         for (int i = 0; i < n; ++i) {
-            show_frame(i);
-            QApplication::processEvents();
+            auto fa = parser_a_->read_frame(i);
+            auto fb = parser_b_->read_frame(i);
+            auto diff = diff_engine.diff(fa, fb);
+            auto rgb = renderer_->render(fa, &fb, &diff, mode, threshold);
 
+            QImage qimg(rgb.data.data(), rgb.width, rgb.height, rgb.width * 3, QImage::Format_RGB888);
             QString fname = QString("%1_vs_%2_frame_%3.png")
                 .arg(a_base)
                 .arg(b_base)
                 .arg(i, 5, 10, QChar('0'));
-            QString full_path = QDir(out_dir).filePath(fname);
-            canvas_->pixmap().save(full_path, "PNG");
+            qimg.save(QDir(out_dir).filePath(fname), "PNG");
+            QApplication::processEvents();
         }
         statusBar()->showMessage(QString("Exported %1 frames to %2").arg(n).arg(out_dir), 5000);
     } else {
@@ -457,14 +478,14 @@ void MainWindow::on_export_all() {
         int n = static_cast<int>(parser->num_frames());
 
         for (int i = 0; i < n; ++i) {
-            show_frame(i);
-            QApplication::processEvents();
-
+            auto f = parser->read_frame(i);
+            auto rgb = renderer_->yuv_to_rgb(f);
+            QImage qimg(rgb.data.data(), rgb.width, rgb.height, rgb.width * 3, QImage::Format_RGB888);
             QString fname = QString("%1_frame_%2.png")
                 .arg(base)
                 .arg(i, 5, 10, QChar('0'));
-            QString full_path = QDir(out_dir).filePath(fname);
-            canvas_->pixmap().save(full_path, "PNG");
+            qimg.save(QDir(out_dir).filePath(fname), "PNG");
+            QApplication::processEvents();
         }
         statusBar()->showMessage(QString("Exported %1 frames to %2").arg(n).arg(out_dir), 5000);
     }
