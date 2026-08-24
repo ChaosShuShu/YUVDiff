@@ -221,41 +221,66 @@ void MainWindow::open_file(const QString& which) {
     );
     if (path.isEmpty()) return;
 
+    // 1. Stop playback if active
+    if (play_timer_->isActive()) {
+        play_timer_->stop();
+        btn_play_->setChecked(false);
+    }
+
     std::string std_path = path.toStdString();
 
-    // 1. Try auto-detecting resolution from filename
+    // 2. Try auto-detecting resolution from filename
     auto auto_res = try_parse_resolution_from_filename(std_path);
     if (auto_res.has_value()) {
+        QSignalBlocker b1(spin_w_);
+        QSignalBlocker b2(spin_h_);
         spin_w_->setValue(auto_res->first);
         spin_h_->setValue(auto_res->second);
     }
 
-    // 2. Try auto-detecting format from filename
+    // 3. Try auto-detecting format from filename
     auto auto_fmt = try_parse_format_from_filename(std_path);
+    auto combo = (which == "a") ? combo_format_a_ : combo_format_b_;
     if (auto_fmt.has_value()) {
         std::string fmt_str = to_string(auto_fmt->first) + to_string(auto_fmt->second);
-        auto combo = (which == "a") ? combo_format_a_ : combo_format_b_;
         int idx = combo->findText(QString::fromStdString(fmt_str));
         if (idx >= 0) {
+            QSignalBlocker b(combo);
             combo->setCurrentIndex(idx);
         }
     }
 
     try {
-        std::string fmt = ((which == "a") ? combo_format_a_ : combo_format_b_)->currentText().toStdString();
+        std::string fmt = combo->currentText().toStdString();
         int w = spin_w_->value();
         int h = spin_h_->value();
         std::string align = combo_align_->currentData().toString().toStdString();
 
         auto parser = std::make_shared<YUVParser>(std_path, fmt, w, h, align);
         if (which == "a") {
+            // If new A has different resolution than existing B, discard old B
+            if (parser_b_ && (parser->width() != parser_b_->width() || parser->height() != parser_b_->height())) {
+                parser_b_.reset();
+            }
             parser_a_ = parser;
         } else {
+            // If new B has different resolution than existing A, discard old A
+            if (parser_a_ && (parser->width() != parser_a_->width() || parser->height() != parser_a_->height())) {
+                parser_a_.reset();
+            }
             parser_b_ = parser;
         }
     } catch (const std::exception& e) {
         QMessageBox::critical(this, "Open failed", e.what());
         return;
+    }
+
+    // Reset slider to 0
+    {
+        QSignalBlocker b_sl(slider_);
+        QSignalBlocker b_sp(spin_frame_);
+        slider_->setValue(0);
+        spin_frame_->setValue(0);
     }
 
     maybe_load_frame();
@@ -300,7 +325,11 @@ void MainWindow::on_format_b_changed(const QString& fmt) {
 }
 
 void MainWindow::maybe_load_frame() {
-    if (!parser_a_ && !parser_b_) return;
+    if (!parser_a_ && !parser_b_) {
+        if (canvas_) canvas_->set_frames(nullptr, nullptr, RenderMode::ORIGINAL_A, 4);
+        if (worker_) worker_->set_parsers(nullptr, nullptr, nullptr);
+        return;
+    }
 
     if (parser_a_ && parser_b_) {
         if (parser_a_->width() != parser_b_->width() || parser_a_->height() != parser_b_->height()) {

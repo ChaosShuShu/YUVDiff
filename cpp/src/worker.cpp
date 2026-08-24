@@ -96,7 +96,21 @@ void AsyncRenderWorker::run() {
 }
 
 void AsyncRenderWorker::process_request(const Request& req) {
-    if (!parser_a_ && !parser_b_) return;
+    std::shared_ptr<YUVParser> pa;
+    std::shared_ptr<YUVParser> pb;
+    std::shared_ptr<Renderer> rend;
+    {
+        std::lock_guard<std::mutex> lock(queue_mutex_);
+        pa = parser_a_;
+        pb = parser_b_;
+        rend = renderer_;
+    }
+
+    if (!pa && !pb) return;
+
+    if (req.frame_idx < 0) return;
+    if (pa && static_cast<size_t>(req.frame_idx) >= pa->num_frames()) return;
+    if (pb && static_cast<size_t>(req.frame_idx) >= pb->num_frames()) return;
 
     // 1. Check cache
     auto cached = cache_.get(req.frame_idx, req.mode, req.threshold);
@@ -104,8 +118,8 @@ void AsyncRenderWorker::process_request(const Request& req) {
         if (!req.is_prefetch) {
             FrameReadyData data;
             data.frame_idx = cached->frame_idx;
-            data.is_dual = (parser_a_ && parser_b_);
-            data.single_channel = parser_a_ ? "a" : "b";
+            data.is_dual = (pa && pb);
+            data.single_channel = pa ? "a" : "b";
             data.frame_a = cached->frame_a;
             data.frame_b = cached->frame_b;
             data.mode = cached->mode;
@@ -121,9 +135,9 @@ void AsyncRenderWorker::process_request(const Request& req) {
 
     // 2. Compute if not in cache
     try {
-        if (parser_a_ && parser_b_) {
-            auto fa = std::make_shared<YUVFrame>(parser_a_->read_frame(static_cast<size_t>(req.frame_idx)));
-            auto fb = std::make_shared<YUVFrame>(parser_b_->read_frame(static_cast<size_t>(req.frame_idx)));
+        if (pa && pb) {
+            auto fa = std::make_shared<YUVFrame>(pa->read_frame(static_cast<size_t>(req.frame_idx)));
+            auto fb = std::make_shared<YUVFrame>(pb->read_frame(static_cast<size_t>(req.frame_idx)));
 
             // 1. FAST VISUAL PATH: Emit immediately so GPU renders without waiting
             if (!req.is_prefetch) {
@@ -177,8 +191,8 @@ void AsyncRenderWorker::process_request(const Request& req) {
                 data.total_pixels = total_pixels;
                 emit frameReady(data);
             }
-        } else if (parser_a_) {
-            auto fa = std::make_shared<YUVFrame>(parser_a_->read_frame(static_cast<size_t>(req.frame_idx)));
+        } else if (pa) {
+            auto fa = std::make_shared<YUVFrame>(pa->read_frame(static_cast<size_t>(req.frame_idx)));
 
             CachedFrame item;
             item.frame_idx = req.frame_idx;
@@ -199,8 +213,8 @@ void AsyncRenderWorker::process_request(const Request& req) {
                 data.total_pixels = item.total_pixels;
                 emit frameReady(data);
             }
-        } else if (parser_b_) {
-            auto fb = std::make_shared<YUVFrame>(parser_b_->read_frame(static_cast<size_t>(req.frame_idx)));
+        } else if (pb) {
+            auto fb = std::make_shared<YUVFrame>(pb->read_frame(static_cast<size_t>(req.frame_idx)));
 
             CachedFrame item;
             item.frame_idx = req.frame_idx;
