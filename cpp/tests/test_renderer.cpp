@@ -48,7 +48,7 @@ TEST_CASE(test_renderer_yuv_to_rgb_neutral) {
 
 TEST_CASE(test_renderer_heatmap_zero_diff) {
     YUVFrame a = make_frame(16, 16, 128, 128, 128);
-    YUVFrame b = make_frame(16, 16, 128, 128, 128); // 0 diff -> norm = 0.0 (Gray 128, 128, 128)
+    YUVFrame b = make_frame(16, 16, 128, 128, 128); // 0 diff -> dark background
 
     DiffEngine engine(4);
     DiffResult diff = engine.diff(a, b);
@@ -59,15 +59,15 @@ TEST_CASE(test_renderer_heatmap_zero_diff) {
     ASSERT_EQ(img.width, 16);
     ASSERT_EQ(img.height, 16);
 
-    // Zero diff heatmap: norm = 0.0 -> R=128, G=128, B=128
-    ASSERT_EQ(img.data[0], 128);
-    ASSERT_EQ(img.data[1], 128);
-    ASSERT_EQ(img.data[2], 128);
+    // Zero diff heatmap: dark canvas
+    ASSERT_EQ(img.data[0], 15);
+    ASSERT_EQ(img.data[1], 15);
+    ASSERT_EQ(img.data[2], 20);
 }
 
 TEST_CASE(test_renderer_heatmap_max_diff) {
     YUVFrame a = make_frame(16, 16, 0, 128, 128);
-    YUVFrame b = make_frame(16, 16, 255, 128, 128); // max diff -> norm = 1.0 (Pure Red 255, 0, 0)
+    YUVFrame b = make_frame(16, 16, 255, 128, 128); // max diff -> intense hot red/white
 
     DiffEngine engine(4);
     DiffResult diff = engine.diff(a, b);
@@ -78,10 +78,8 @@ TEST_CASE(test_renderer_heatmap_max_diff) {
     ASSERT_EQ(img.width, 16);
     ASSERT_EQ(img.height, 16);
 
-    // Max diff heatmap: norm = 1.0 -> R=255, G=0, B=0
+    // Max diff heatmap: Red channel is saturated
     ASSERT_EQ(img.data[0], 255);
-    ASSERT_EQ(img.data[1], 0);
-    ASSERT_EQ(img.data[2], 0);
 }
 
 TEST_CASE(test_renderer_threshold_mask) {

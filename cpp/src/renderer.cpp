@@ -110,17 +110,27 @@ RgbImage Renderer::render_heatmap(const DiffResult& diff, int bit_depth) const {
             size_t p_idx = static_cast<size_t>(r) * w + c;
             size_t idx = p_idx * 3;
 
-            double diff_val = static_cast<double>(diff.diff_y[p_idx]);
+            double diff_val = static_cast<double>(diff.diff_pixel.empty() ? diff.diff_y[p_idx] : diff.diff_pixel[p_idx]);
             double norm = std::clamp(diff_val / max_val, 0.0, 1.0);
 
-            // 0 error -> Gray (128, 128, 128), Max error -> Pure Red (255, 0, 0)
-            double r_val = 128.0 + 127.0 * norm;
-            double g_val = 128.0 * (1.0 - norm);
-            double b_val = 128.0 * (1.0 - norm);
-
-            img.data[idx + 0] = clamp_u8(r_val);
-            img.data[idx + 1] = clamp_u8(g_val);
-            img.data[idx + 2] = clamp_u8(b_val);
+            if (norm <= 0.0001) {
+                img.data[idx + 0] = 15;
+                img.data[idx + 1] = 15;
+                img.data[idx + 2] = 20;
+            } else {
+                double t = std::clamp(std::pow(norm * 6.0, 0.65), 0.0, 1.0);
+                double r_val = std::clamp(1.5 - std::abs(t - 0.75) * 4.0, 0.0, 1.0) * 255.0;
+                double g_val = std::clamp(1.5 - std::abs(t - 0.50) * 4.0, 0.0, 1.0) * 255.0;
+                double b_val = std::clamp(1.5 - std::abs(t - 0.25) * 4.0, 0.0, 1.0) * 255.0;
+                if (t > 0.85) {
+                    r_val = 255.0;
+                    g_val = ((t - 0.85) / 0.15) * 255.0;
+                    b_val = ((t - 0.85) / 0.15) * 255.0;
+                }
+                img.data[idx + 0] = clamp_u8(r_val);
+                img.data[idx + 1] = clamp_u8(g_val);
+                img.data[idx + 2] = clamp_u8(b_val);
+            }
         }
     }
 

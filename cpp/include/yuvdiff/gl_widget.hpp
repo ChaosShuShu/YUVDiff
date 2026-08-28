@@ -23,6 +23,9 @@ struct PixelInfo {
     bool has_b = false;
     int y_b = 0, u_b = 0, v_b = 0;
     int diff_y = 0;
+    int diff_u = 0;
+    int diff_v = 0;
+    int diff_max = 0;
 };
 
 class YUVGLWidget : public QOpenGLWidget, protected QOpenGLFunctions {

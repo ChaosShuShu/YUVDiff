@@ -476,11 +476,11 @@ void MainWindow::on_pixel_hovered(const yuvdiff::PixelInfo& info) {
 
     if (info.has_a && info.has_b) {
         lbl_pixel_info_->setText(
-            QString("Pos: (%1, %2)  |  A: Y=%3 U=%4 V=%5  |  B: Y=%6 U=%7 V=%8  |  ΔY=%9")
+            QString("Pos: (%1, %2)  |  A: Y=%3 U=%4 V=%5  |  B: Y=%6 U=%7 V=%8  |  Δ: Y=%9 U=%10 V=%11 (Max=%12)")
                 .arg(info.x).arg(info.y)
                 .arg(info.y_a).arg(info.u_a).arg(info.v_a)
                 .arg(info.y_b).arg(info.u_b).arg(info.v_b)
-                .arg(info.diff_y)
+                .arg(info.diff_y).arg(info.diff_u).arg(info.diff_v).arg(info.diff_max)
         );
     } else if (info.has_a) {
         lbl_pixel_info_->setText(

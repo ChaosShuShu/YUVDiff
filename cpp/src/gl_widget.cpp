@@ -52,6 +52,21 @@ vec3 yuv_to_rgb(float y, float u, float v) {
     return clamp(vec3(r, g, b), 0.0, 1.0);
 }
 
+vec3 turbo_colormap(float x) {
+    if (x <= 0.0001) return vec3(0.06, 0.06, 0.08); // 0 diff is dark
+    // Non-linear amplification so small errors (1~10 levels out of 255) are vividly visible
+    float t = clamp(pow(x * 6.0, 0.65), 0.0, 1.0);
+    float r = clamp(1.5 - abs(t - 0.75) * 4.0, 0.0, 1.0);
+    float g = clamp(1.5 - abs(t - 0.50) * 4.0, 0.0, 1.0);
+    float b = clamp(1.5 - abs(t - 0.25) * 4.0, 0.0, 1.0);
+    if (t > 0.85) {
+        r = 1.0;
+        g = (t - 0.85) / 0.15;
+        b = (t - 0.85) / 0.15;
+    }
+    return vec3(r, g, b);
+}
+
 void main() {
     float ya = texture(tex_y_a, TexCoord).r * u_scale_a;
     float ua = texture(tex_u_a, TexCoord).r * u_scale_a;
@@ -71,23 +86,22 @@ void main() {
         return;
     }
 
-    float diff_y = abs(ya - yb);
+    float dy = abs(ya - yb);
+    float du = abs(ua - ub);
+    float dv = abs(va - vb);
+    float max_diff = max(dy, max(du, dv));
 
     if (u_mode == 2) {
-        // HEATMAP: 0 -> Gray (0.5, 0.5, 0.5), Max (1.0) -> Pure Red (1.0, 0.0, 0.0)
-        float norm = clamp(diff_y, 0.0, 1.0);
-        float r = 0.5 + 0.5 * norm;
-        float g = 0.5 * (1.0 - norm);
-        float b = 0.5 * (1.0 - norm);
-        FragColor = vec4(r, g, b, 1.0);
+        // High-contrast false-color Heatmap (Turbo/Jet palette with amplification)
+        FragColor = vec4(turbo_colormap(max_diff), 1.0);
         return;
     }
 
     if (u_mode == 3) {
-        // THRESHOLD_MASK
+        // THRESHOLD_MASK (covers Y, U, V channels)
         vec3 rgb_a = yuv_to_rgb(ya, ua, va);
-        if (diff_y > u_threshold) {
-            FragColor = vec4(mix(rgb_a, vec3(1.0, 0.0, 0.0), 0.6), 1.0);
+        if (max_diff > u_threshold) {
+            FragColor = vec4(mix(rgb_a, vec3(1.0, 0.1, 0.1), 0.65), 1.0);
         } else {
             FragColor = vec4(rgb_a, 1.0);
         }
@@ -256,6 +270,9 @@ void YUVGLWidget::mouseMoveEvent(QMouseEvent* event) {
 
         if (info.has_a && info.has_b) {
             info.diff_y = std::abs(info.y_a - info.y_b);
+            info.diff_u = std::abs(info.u_a - info.u_b);
+            info.diff_v = std::abs(info.v_a - info.v_b);
+            info.diff_max = std::max({info.diff_y, info.diff_u, info.diff_v});
         }
 
         emit pixelHovered(info);
@@ -470,14 +487,20 @@ void YUVGLWidget::render_pixel_grid_and_values(
             int ub = fb ? fb->get_u(r / v_sub_b, c / h_sub_b) : 0;
             int vb = fb ? fb->get_v(r / v_sub_b, c / h_sub_b) : 0;
 
-            int diff = std::abs(ya - yb);
+            int dy = std::abs(ya - yb);
+            int du = std::abs(ua - ub);
+            int dv = std::abs(va - vb);
+            int diff = std::max({dy, du, dv});
 
-            // Draw dark translucent background badge for extreme text readability
-            float pad = std::max(2.0f, pixel_w_screen * 0.05f);
-            QRectF badge_rect(cell_rect.x() + pad, cell_rect.y() + pad, cell_rect.width() - 2.0f * pad, cell_rect.height() - 2.0f * pad);
-            painter.setPen(Qt::NoPen);
-            painter.setBrush(QColor(0, 0, 0, 160));
-            painter.drawRoundedRect(badge_rect, 3.0, 3.0);
+            auto draw_shadow_text = [&](const QRectF& rect, int align, const QString& text, const QColor& col) {
+                painter.setPen(QColor(0, 0, 0, 200));
+                painter.drawText(rect.translated(1, 1), align, text);
+                painter.drawText(rect.translated(-1, -1), align, text);
+                painter.drawText(rect.translated(1, -1), align, text);
+                painter.drawText(rect.translated(-1, 1), align, text);
+                painter.setPen(col);
+                painter.drawText(rect, align, text);
+            };
 
             if (is_compact) {
                 // Compact single-line display
@@ -491,37 +514,27 @@ void YUVGLWidget::render_pixel_grid_and_values(
                     text = QString("d%1").arg(diff);
                     col = (diff > 0) ? QColor(255, 90, 90) : QColor(160, 255, 160);
                 }
-                painter.setPen(col);
-                painter.drawText(badge_rect, Qt::AlignCenter, text);
+                draw_shadow_text(cell_rect, Qt::AlignCenter, text, col);
             } else {
                 // Full 3-line multi-color display
-                float line_h = badge_rect.height() / 3.0f;
-                QRectF r1(badge_rect.x(), badge_rect.y(), badge_rect.width(), line_h);
-                QRectF r2(badge_rect.x(), badge_rect.y() + line_h, badge_rect.width(), line_h);
-                QRectF r3(badge_rect.x(), badge_rect.y() + 2.0f * line_h, badge_rect.width(), line_h);
+                float line_h = cell_rect.height() / 3.0f;
+                QRectF r1(cell_rect.x(), cell_rect.y(), cell_rect.width(), line_h);
+                QRectF r2(cell_rect.x(), cell_rect.y() + line_h, cell_rect.width(), line_h);
+                QRectF r3(cell_rect.x(), cell_rect.y() + 2.0f * line_h, cell_rect.width(), line_h);
 
                 if (mode == RenderMode::ORIGINAL_B && fb) {
-                    painter.setPen(QColor(255, 255, 255));
-                    painter.drawText(r1, Qt::AlignCenter, QString("Y:%1").arg(yb));
-                    painter.setPen(QColor(100, 220, 255));
-                    painter.drawText(r2, Qt::AlignCenter, QString("U:%1").arg(ub));
-                    painter.setPen(QColor(255, 185, 95));
-                    painter.drawText(r3, Qt::AlignCenter, QString("V:%1").arg(vb));
+                    draw_shadow_text(r1, Qt::AlignCenter, QString("Y:%1").arg(yb), QColor(255, 255, 255));
+                    draw_shadow_text(r2, Qt::AlignCenter, QString("U:%1").arg(ub), QColor(100, 220, 255));
+                    draw_shadow_text(r3, Qt::AlignCenter, QString("V:%1").arg(vb), QColor(255, 185, 95));
                 } else if (mode == RenderMode::ORIGINAL_A || !fb) {
-                    painter.setPen(QColor(255, 255, 255));
-                    painter.drawText(r1, Qt::AlignCenter, QString("Y:%1").arg(ya));
-                    painter.setPen(QColor(100, 220, 255));
-                    painter.drawText(r2, Qt::AlignCenter, QString("U:%1").arg(ua));
-                    painter.setPen(QColor(255, 185, 95));
-                    painter.drawText(r3, Qt::AlignCenter, QString("V:%1").arg(va));
+                    draw_shadow_text(r1, Qt::AlignCenter, QString("Y:%1").arg(ya), QColor(255, 255, 255));
+                    draw_shadow_text(r2, Qt::AlignCenter, QString("U:%1").arg(ua), QColor(100, 220, 255));
+                    draw_shadow_text(r3, Qt::AlignCenter, QString("V:%1").arg(va), QColor(255, 185, 95));
                 } else {
-                    painter.setPen(QColor(255, 255, 255));
-                    painter.drawText(r1, Qt::AlignCenter, QString("A:%1").arg(ya));
-                    painter.setPen(QColor(160, 210, 255));
-                    painter.drawText(r2, Qt::AlignCenter, QString("B:%1").arg(yb));
+                    draw_shadow_text(r1, Qt::AlignCenter, QString("Ya:%1 Yb:%2").arg(ya).arg(yb), (dy > 0 ? QColor(255, 120, 120) : QColor(255, 255, 255)));
+                    draw_shadow_text(r2, Qt::AlignCenter, QString("Ua:%1 Ub:%2").arg(ua).arg(ub), (du > 0 ? QColor(255, 150, 100) : QColor(100, 220, 255)));
                     QColor diff_col = (diff > 0) ? QColor(255, 80, 80) : QColor(140, 255, 140);
-                    painter.setPen(diff_col);
-                    painter.drawText(r3, Qt::AlignCenter, QString("d:%1").arg(diff));
+                    draw_shadow_text(r3, Qt::AlignCenter, QString("Δ: Y%1 U%2 V%3").arg(dy).arg(du).arg(dv), diff_col);
                 }
             }
         }

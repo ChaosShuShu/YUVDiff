@@ -352,7 +352,7 @@ int run_cmp(
         if (diff.diff_max > global_max) global_max = diff.diff_max;
         if (diff.diff_min < global_min) global_min = diff.diff_min;
 
-        for (int32_t d : diff.diff_y) {
+        for (int32_t d : diff.diff_pixel) {
             if (d >= 0 && d < 1024) global_hist[d]++;
             else if (d >= 1024) global_hist[1023]++;
         }

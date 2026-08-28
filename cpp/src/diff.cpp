@@ -37,6 +37,7 @@ DiffResult DiffEngine::diff(const YUVFrame& a, const YUVFrame& b) const {
     result.diff_y.resize(static_cast<size_t>(w) * h);
     result.diff_u.resize(static_cast<size_t>(cw) * ch);
     result.diff_v.resize(static_cast<size_t>(cw) * ch);
+    result.diff_pixel.resize(static_cast<size_t>(w) * h);
     result.mask.resize(static_cast<size_t>(w) * h, 0);
     result.total_pixel_count = static_cast<int64_t>(w) * h;
     result.diff_pixel_count = 0;
@@ -89,6 +90,7 @@ DiffResult DiffEngine::diff(const YUVFrame& a, const YUVFrame& b) const {
             );
 
             int32_t d_pixel = std::max({dy, du, dv});
+            result.diff_pixel[y_idx] = d_pixel;
             sum_diff += d_pixel;
             if (d_pixel < min_diff) min_diff = d_pixel;
             if (d_pixel > max_diff) max_diff = d_pixel;
