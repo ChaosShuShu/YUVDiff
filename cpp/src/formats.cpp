@@ -116,22 +116,18 @@ std::string get_basename_lower(std::string_view path) {
 std::optional<std::pair<int, int>> try_parse_resolution_from_filename(std::string_view path) {
     std::string name = get_basename_lower(path);
 
-    // 1. Check numeric resolution patterns like 1920x1080, 3840_2160, 352x288, 176x144
-    static const std::regex res_re(R"((?:^|[^0-9])([1-9][0-9]{1,4})[x_]([1-9][0-9]{1,4})(?:[^0-9]|$))");
-    auto words_begin = std::sregex_iterator(name.begin(), name.end(), res_re);
-    auto words_end = std::sregex_iterator();
+    // 1. Prioritize explicit 'x' or 'X' resolution patterns like 1920x1080, 3840x2160, 352x288, 176x144
+    static const std::regex res_x_re(R"((?:^|[^0-9a-zA-Z])([1-9][0-9]{1,4})[xX]([1-9][0-9]{1,4})(?:[^0-9a-zA-Z]|$))");
+    auto x_begin = std::sregex_iterator(name.begin(), name.end(), res_x_re);
+    auto x_end = std::sregex_iterator();
 
-    for (std::sregex_iterator it = words_begin; it != words_end; ++it) {
+    for (std::sregex_iterator it = x_begin; it != x_end; ++it) {
         std::smatch match = *it;
         try {
             int w = std::stoi(match[1].str());
             int h = std::stoi(match[2].str());
-            // Filter reasonable video dimensions
             if (w >= 16 && w <= 16384 && h >= 16 && h <= 16384) {
-                // Avoid date/timestamp patterns like 2026_0824
-                if (w != 2024 && w != 2025 && w != 2026 && !(w > 2000 && h > 2000 && w == h + 1)) {
-                    return std::pair<int, int>{w, h};
-                }
+                return std::pair<int, int>{w, h};
             }
         } catch (...) {}
     }
@@ -145,6 +141,25 @@ std::optional<std::pair<int, int>> try_parse_resolution_from_filename(std::strin
     if (name.find("1440p") != std::string::npos || name.find("2k") != std::string::npos || name.find("qhd") != std::string::npos) return std::pair<int, int>{2560, 1440};
     if (name.find("2160p") != std::string::npos || name.find("4k") != std::string::npos || name.find("uhd") != std::string::npos) return std::pair<int, int>{3840, 2160};
     if (name.find("4320p") != std::string::npos || name.find("8k") != std::string::npos) return std::pair<int, int>{7680, 4320};
+
+    // 3. Fallback: check '_' separated resolutions (e.g. video_1920_1080.yuv)
+    static const std::regex res_underscore_re(R"((?:^|[^0-9a-zA-Z])([1-9][0-9]{2,4})_([1-9][0-9]{2,4})(?:[^0-9a-zA-Z]|$))");
+    auto u_begin = std::sregex_iterator(name.begin(), name.end(), res_underscore_re);
+    auto u_end = std::sregex_iterator();
+
+    for (std::sregex_iterator it = u_begin; it != u_end; ++it) {
+        std::smatch match = *it;
+        try {
+            int w = std::stoi(match[1].str());
+            int h = std::stoi(match[2].str());
+            if (w >= 64 && w <= 16384 && h >= 64 && h <= 16384) {
+                // Avoid date/timestamp patterns like 2026_0824
+                if (w != 2024 && w != 2025 && w != 2026 && !(w > 2000 && h > 2000 && w == h + 1)) {
+                    return std::pair<int, int>{w, h};
+                }
+            }
+        } catch (...) {}
+    }
 
     return std::nullopt;
 }

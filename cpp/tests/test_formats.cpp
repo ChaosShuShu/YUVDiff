@@ -106,6 +106,17 @@ TEST_CASE(test_try_parse_resolution_from_filename) {
 
     auto r7 = try_parse_resolution_from_filename("no_res_here.yuv");
     ASSERT_FALSE(r7.has_value());
+
+    // Test case from user bug report: prefix number with underscore
+    auto r8 = try_parse_resolution_from_filename("out44_3840x2160_yuv420p10le.yuv");
+    ASSERT_TRUE(r8.has_value());
+    ASSERT_EQ(r8->first, 3840);
+    ASSERT_EQ(r8->second, 2160);
+
+    auto r9 = try_parse_resolution_from_filename("video_1920_1080.yuv");
+    ASSERT_TRUE(r9.has_value());
+    ASSERT_EQ(r9->first, 1920);
+    ASSERT_EQ(r9->second, 1080);
 }
 
 TEST_CASE(test_try_parse_format_from_filename) {
@@ -129,6 +140,11 @@ TEST_CASE(test_try_parse_format_from_filename) {
     ASSERT_TRUE(f4->first == PixelFormat::YUV420P);
     ASSERT_TRUE(f4->second == BitDepth::BIT8);
 
-    auto f5 = try_parse_format_from_filename("unknown_video.yuv");
-    ASSERT_FALSE(f5.has_value());
+    auto f5 = try_parse_format_from_filename("out44_3840x2160_yuv420p10le.yuv");
+    ASSERT_TRUE(f5.has_value());
+    ASSERT_TRUE(f5->first == PixelFormat::YUV420P);
+    ASSERT_TRUE(f5->second == BitDepth::BIT10LE);
+
+    auto f6 = try_parse_format_from_filename("unknown_video.yuv");
+    ASSERT_FALSE(f6.has_value());
 }
