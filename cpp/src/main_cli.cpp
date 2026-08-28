@@ -37,7 +37,7 @@ int run_info(const std::string& input_path, int width, int height, std::string f
         if (auto_fmt.has_value()) {
             format_str = yuvdiff::to_string(auto_fmt->first) + yuvdiff::to_string(auto_fmt->second);
         } else {
-            format_str = "YUV420P8";
+            format_str = "yuv420p8";
         }
     }
 
@@ -78,7 +78,7 @@ int run_cut(const yuvdiff::CutOptions& in_opts) {
         if (auto_fmt.has_value()) {
             opts.format_str = yuvdiff::to_string(auto_fmt->first) + yuvdiff::to_string(auto_fmt->second);
         } else {
-            opts.format_str = "YUV420P8";
+            opts.format_str = "yuv420p8";
         }
     }
 
@@ -134,7 +134,7 @@ int run_diff(
                 format_a_str = yuvdiff::to_string(auto_fmt->first) + yuvdiff::to_string(auto_fmt->second);
                 if (!quiet) std::cerr << "# Auto-detected format A: " << format_a_str << "\n";
             } else {
-                format_a_str = "YUV420P8";
+                format_a_str = "yuv420p8";
             }
         }
     }
@@ -272,7 +272,7 @@ int run_cmp(
             if (auto_fmt.has_value()) {
                 format_a_str = yuvdiff::to_string(auto_fmt->first) + yuvdiff::to_string(auto_fmt->second);
             } else {
-                format_a_str = "YUV420P8";
+                format_a_str = "yuv420p8";
             }
         }
     }
@@ -443,7 +443,7 @@ int main(int argc, char* argv[]) {
         sub->add_option("file_b", diff_path_b, "Second YUV video file (Video B)");
         sub->add_option("-w,--width", diff_width, "Width in pixels");
         sub->add_option("-h,--height", diff_height, "Height in pixels");
-        sub->add_option("-f,--format", diff_format, "YUV format (e.g. YUV420P8, YUV422P10LE)");
+        sub->add_option("-f,--format", diff_format, "YUV format (e.g. yuv420p, yuv420p10le, yuv422p10, yuv444p)");
         sub->add_option("--format-a", diff_format_a, "YUV format for Video A");
         sub->add_option("--format-b", diff_format_b, "YUV format for Video B");
         sub->add_option("-n,--frames", diff_frames, "Number of frames to compare");
@@ -477,7 +477,7 @@ int main(int argc, char* argv[]) {
     cmp_cmd->add_option("file_b", cmp_path_b, "Second YUV video file (Video B)")->required();
     cmp_cmd->add_option("-w,--width", cmp_width, "Width in pixels");
     cmp_cmd->add_option("-h,--height", cmp_height, "Height in pixels");
-    cmp_cmd->add_option("-f,--format", cmp_format, "YUV format (e.g. YUV420P8, YUV422P10LE)");
+    cmp_cmd->add_option("-f,--format", cmp_format, "YUV format (e.g. yuv420p, yuv420p10le, yuv422p10, yuv444p)");
     cmp_cmd->add_option("--format-a", cmp_format_a, "YUV format for Video A");
     cmp_cmd->add_option("--format-b", cmp_format_b, "YUV format for Video B");
     cmp_cmd->add_option("-n,--frames", cmp_frames, "Number of frames to compare");
@@ -497,7 +497,7 @@ int main(int argc, char* argv[]) {
     cut_cmd->add_option("-s,--start", cut_opts.start_frame, "Start frame index (default: 0)");
     cut_cmd->add_option("-w,--width", cut_opts.width, "Width in pixels");
     cut_cmd->add_option("-h,--height", cut_opts.height, "Height in pixels");
-    cut_cmd->add_option("-f,--format", cut_opts.format_str, "YUV format (e.g. YUV420P8, YUV420P10LE)");
+    cut_cmd->add_option("-f,--format", cut_opts.format_str, "YUV format (e.g. yuv420p, yuv420p10le, yuv422p10)");
     cut_cmd->add_option("--10bit-align", cut_opts.align_str, "10-bit alignment: msb, lsb, auto");
 
     // =========================================================================

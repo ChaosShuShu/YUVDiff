@@ -6,40 +6,51 @@
 namespace yuvdiff {
 
 std::pair<PixelFormat, BitDepth> parse_format(std::string_view s) {
-    static const std::regex format_re(R"(^(YUV(?:420P|422P|444P))(8|10LE|10BE)?$)");
-    std::string str(s);
+    if (s.empty()) {
+        throw std::invalid_argument("Format string cannot be empty");
+    }
+
+    std::string lower(s);
+    for (char& c : lower) {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+
+    static const std::regex format_re(
+        R"(^(?:yuv)?(420|422|444|420p|422p|444p|i420|yv12|nv12|nv21|nv16|nv24)(?:[_\-p])?(8|10|10le|10be)?$)"
+    );
     std::smatch match;
 
-    if (!std::regex_match(str, match, format_re)) {
+    if (!std::regex_match(lower, match, format_re)) {
         throw std::invalid_argument(
-            "Unsupported format: '" + str + "'. Supported: "
-            "YUV420P8, YUV422P8, YUV444P8, YUV420P10LE, YUV422P10LE, YUV444P10LE"
+            "Unsupported format: '" + std::string(s) + "'. Supported formats include: "
+            "yuv420p (yuv420p8), yuv422p (yuv422p8), yuv444p (yuv444p8), "
+            "yuv420p10le (yuv420p10), yuv422p10le (yuv422p10), yuv444p10le (yuv444p10)"
         );
     }
 
-    std::string pixel_str = match[1].str();
+    std::string base = match[1].str();
     std::string suffix = match[2].matched ? match[2].str() : "";
 
     PixelFormat fmt;
-    if (pixel_str == "YUV420P") {
+    if (base == "420" || base == "420p" || base == "i420" || base == "yv12" || base == "nv12" || base == "nv21") {
         fmt = PixelFormat::YUV420P;
-    } else if (pixel_str == "YUV422P") {
+    } else if (base == "422" || base == "422p" || base == "nv16") {
         fmt = PixelFormat::YUV422P;
-    } else if (pixel_str == "YUV444P") {
+    } else if (base == "444" || base == "444p" || base == "nv24") {
         fmt = PixelFormat::YUV444P;
     } else {
-        throw std::invalid_argument("Unknown pixel format in: " + str);
+        throw std::invalid_argument("Unknown pixel format in: '" + std::string(s) + "'");
     }
 
     BitDepth depth;
     if (suffix.empty() || suffix == "8") {
         depth = BitDepth::BIT8;
-    } else if (suffix == "10LE") {
+    } else if (suffix == "10" || suffix == "10le") {
         depth = BitDepth::BIT10LE;
-    } else if (suffix == "10BE") {
+    } else if (suffix == "10be") {
         throw std::invalid_argument("Big-endian 10-bit is not supported in v1");
     } else {
-        throw std::invalid_argument("Unsupported bit depth suffix in: " + str);
+        throw std::invalid_argument("Unsupported bit depth suffix in: '" + std::string(s) + "'");
     }
 
     return {fmt, depth};
@@ -76,19 +87,19 @@ size_t frame_bytes(PixelFormat fmt, int width, int height, BitDepth bit_depth) {
 
 std::string to_string(PixelFormat fmt) {
     switch (fmt) {
-        case PixelFormat::YUV420P: return "YUV420P";
-        case PixelFormat::YUV422P: return "YUV422P";
-        case PixelFormat::YUV444P: return "YUV444P";
+        case PixelFormat::YUV420P: return "yuv420p";
+        case PixelFormat::YUV422P: return "yuv422p";
+        case PixelFormat::YUV444P: return "yuv444p";
     }
-    return "Unknown";
+    return "unknown";
 }
 
 std::string to_string(BitDepth depth) {
     switch (depth) {
         case BitDepth::BIT8: return "8";
-        case BitDepth::BIT10LE: return "10LE";
+        case BitDepth::BIT10LE: return "10le";
     }
-    return "Unknown";
+    return "unknown";
 }
 
 std::string to_string(BitAlignment align) {
@@ -96,7 +107,7 @@ std::string to_string(BitAlignment align) {
         case BitAlignment::MSB: return "msb";
         case BitAlignment::LSB: return "lsb";
     }
-    return "Unknown";
+    return "unknown";
 }
 
 namespace {

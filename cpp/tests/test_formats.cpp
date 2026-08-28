@@ -4,42 +4,87 @@
 using namespace yuvdiff;
 
 TEST_CASE(test_format_parse_8bit) {
+    // 1. Case-insensitivity
     auto [f1, d1] = parse_format("YUV420P8");
     ASSERT_TRUE(f1 == PixelFormat::YUV420P);
     ASSERT_TRUE(d1 == BitDepth::BIT8);
 
-    auto [f2, d2] = parse_format("YUV422P8");
+    auto [f1_lower, d1_lower] = parse_format("yuv420p8");
+    ASSERT_TRUE(f1_lower == PixelFormat::YUV420P);
+    ASSERT_TRUE(d1_lower == BitDepth::BIT8);
+
+    auto [f1_mixed, d1_mixed] = parse_format("yUv420p8");
+    ASSERT_TRUE(f1_mixed == PixelFormat::YUV420P);
+    ASSERT_TRUE(d1_mixed == BitDepth::BIT8);
+
+    auto [f2, d2] = parse_format("yuv422p8");
     ASSERT_TRUE(f2 == PixelFormat::YUV422P);
     ASSERT_TRUE(d2 == BitDepth::BIT8);
 
-    auto [f3, d3] = parse_format("YUV444P8");
+    auto [f3, d3] = parse_format("yuv444p8");
     ASSERT_TRUE(f3 == PixelFormat::YUV444P);
     ASSERT_TRUE(d3 == BitDepth::BIT8);
 
-    auto [f4, d4] = parse_format("YUV420P");
+    // 2. Default bit depth to 8-bit when bit depth is omitted
+    auto [f4, d4] = parse_format("yuv420p");
     ASSERT_TRUE(f4 == PixelFormat::YUV420P);
     ASSERT_TRUE(d4 == BitDepth::BIT8);
+
+    auto [f5, d5] = parse_format("YUV422P");
+    ASSERT_TRUE(f5 == PixelFormat::YUV422P);
+    ASSERT_TRUE(d5 == BitDepth::BIT8);
+
+    auto [f6, d6] = parse_format("444p");
+    ASSERT_TRUE(f6 == PixelFormat::YUV444P);
+    ASSERT_TRUE(d6 == BitDepth::BIT8);
+
+    auto [f7, d7] = parse_format("i420");
+    ASSERT_TRUE(f7 == PixelFormat::YUV420P);
+    ASSERT_TRUE(d7 == BitDepth::BIT8);
+
+    auto [f8, d8] = parse_format("nv12");
+    ASSERT_TRUE(f8 == PixelFormat::YUV420P);
+    ASSERT_TRUE(d8 == BitDepth::BIT8);
 }
 
 TEST_CASE(test_format_parse_10bit_le) {
+    // 1. Case-insensitivity with 10le
     auto [f1, d1] = parse_format("YUV420P10LE");
     ASSERT_TRUE(f1 == PixelFormat::YUV420P);
     ASSERT_TRUE(d1 == BitDepth::BIT10LE);
 
-    auto [f2, d2] = parse_format("YUV422P10LE");
-    ASSERT_TRUE(f2 == PixelFormat::YUV422P);
-    ASSERT_TRUE(d2 == BitDepth::BIT10LE);
+    auto [f1_lower, d1_lower] = parse_format("yuv420p10le");
+    ASSERT_TRUE(f1_lower == PixelFormat::YUV420P);
+    ASSERT_TRUE(d1_lower == BitDepth::BIT10LE);
 
-    auto [f3, d3] = parse_format("YUV444P10LE");
-    ASSERT_TRUE(f3 == PixelFormat::YUV444P);
-    ASSERT_TRUE(d3 == BitDepth::BIT10LE);
+    auto [f1_mixed, d1_mixed] = parse_format("yUv420p10Le");
+    ASSERT_TRUE(f1_mixed == PixelFormat::YUV420P);
+    ASSERT_TRUE(d1_mixed == BitDepth::BIT10LE);
+
+    // 2. Default endianness to LE when omitted
+    auto [f2_no_endian, d2_no_endian] = parse_format("yuv420p10");
+    ASSERT_TRUE(f2_no_endian == PixelFormat::YUV420P);
+    ASSERT_TRUE(d2_no_endian == BitDepth::BIT10LE);
+
+    auto [f3_no_endian, d3_no_endian] = parse_format("YUV422P10");
+    ASSERT_TRUE(f3_no_endian == PixelFormat::YUV422P);
+    ASSERT_TRUE(d3_no_endian == BitDepth::BIT10LE);
+
+    auto [f4_no_endian, d4_no_endian] = parse_format("444p10");
+    ASSERT_TRUE(f4_no_endian == PixelFormat::YUV444P);
+    ASSERT_TRUE(d4_no_endian == BitDepth::BIT10LE);
+
+    // 3. String conversions produce lowercase
+    ASSERT_EQ(to_string(PixelFormat::YUV420P), "yuv420p");
+    ASSERT_EQ(to_string(BitDepth::BIT10LE), "10le");
 }
 
 TEST_CASE(test_format_parse_invalid) {
     ASSERT_THROWS(parse_format("YUV420P10BE"), std::invalid_argument);
-    ASSERT_THROWS(parse_format("YUV420"), std::invalid_argument);
+    ASSERT_THROWS(parse_format("yuv420p10be"), std::invalid_argument);
     ASSERT_THROWS(parse_format("RGB24"), std::invalid_argument);
     ASSERT_THROWS(parse_format(""), std::invalid_argument);
+    ASSERT_THROWS(parse_format("invalid_fmt"), std::invalid_argument);
 }
 
 TEST_CASE(test_chroma_subsampling) {

@@ -12,7 +12,7 @@ struct CutOptions {
     std::string output_path;
     int width = 0;
     int height = 0;
-    std::string format_str = "YUV420P8";
+    std::string format_str = "yuv420p8";
     size_t start_frame = 0;
     size_t num_frames = 0;
     std::string align_str = "auto";

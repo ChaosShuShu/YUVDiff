@@ -42,30 +42,50 @@ class BitAlignment(Enum):
     LSB = "lsb"
 
 
-_FORMAT_RE = re.compile(r"^(YUV(?:420P|422P|444P))(8|10LE|10BE)?$")
+_FORMAT_RE = re.compile(
+    r"^(?:yuv)?(420|422|444|420p|422p|444p|i420|yv12|nv12|nv21|nv16|nv24)(?:[_\-p])?(8|10|10le|10be)?$",
+    re.IGNORECASE,
+)
 
 
 def parse_format(s: str) -> tuple[PixelFormat, BitDepth]:
-    """Parse a format string like 'YUV420P8' or 'YUV420P10LE'.
+    """Parse a format string like 'yuv420p', 'YUV420P8', 'yuv420p10', or 'yuv420p10le'.
 
     Raises:
         ValueError: if the format is not in the supported list.
     """
-    m = _FORMAT_RE.match(s)
+    if not s:
+        raise ValueError("Format string cannot be empty")
+
+    m = _FORMAT_RE.match(s.strip())
     if not m:
         raise ValueError(
             f"Unsupported format: {s!r}. Supported: "
-            "YUV420P8, YUV422P8, YUV444P8, YUV420P10LE, YUV422P10LE, YUV444P10LE"
+            "yuv420p (yuv420p8), yuv422p (yuv422p8), yuv444p (yuv444p8), "
+            "yuv420p10le (yuv420p10), yuv422p10le (yuv422p10), yuv444p10le (yuv444p10)"
         )
-    pixel_str, suffix = m.group(1), m.group(2)
-    if suffix is None or suffix == "8":
-        return PixelFormat(pixel_str), BitDepth.BIT8
-    if suffix == "10LE":
-        return PixelFormat(pixel_str), BitDepth.BIT10LE
-    if suffix == "10BE":
+    base = m.group(1).lower()
+    suffix = (m.group(2) or "").lower()
+
+    if base in ("420", "420p", "i420", "yv12", "nv12", "nv21"):
+        pixel_fmt = PixelFormat.YUV420P
+    elif base in ("422", "422p", "nv16"):
+        pixel_fmt = PixelFormat.YUV422P
+    elif base in ("444", "444p", "nv24"):
+        pixel_fmt = PixelFormat.YUV444P
+    else:
+        raise ValueError(f"Unknown pixel format: {s!r}")
+
+    if suffix in ("", "8"):
+        depth = BitDepth.BIT8
+    elif suffix in ("10", "10le"):
+        depth = BitDepth.BIT10LE
+    elif suffix == "10be":
         raise ValueError("Big-endian 10-bit is not supported in v1")
-    # Should not reach here.
-    raise ValueError(f"Unsupported format: {s!r}")
+    else:
+        raise ValueError(f"Unsupported bit depth suffix in: {s!r}")
+
+    return pixel_fmt, depth
 
 
 def chroma_subsampling(fmt: PixelFormat) -> tuple[int, int]:

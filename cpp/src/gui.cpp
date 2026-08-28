@@ -52,16 +52,16 @@ void MainWindow::build_ui() {
     btn_open_a_ = new QPushButton("Open A…", this);
     combo_format_a_ = new QComboBox(this);
     combo_format_a_->addItems({
-        "YUV420P8", "YUV422P8", "YUV444P8",
-        "YUV420P10LE", "YUV422P10LE", "YUV444P10LE"
+        "yuv420p8", "yuv422p8", "yuv444p8",
+        "yuv420p10le", "yuv422p10le", "yuv444p10le"
     });
     connect(combo_format_a_, &QComboBox::currentTextChanged, this, &MainWindow::on_format_a_changed);
 
     btn_open_b_ = new QPushButton("Open B…", this);
     combo_format_b_ = new QComboBox(this);
     combo_format_b_->addItems({
-        "YUV420P8", "YUV422P8", "YUV444P8",
-        "YUV420P10LE", "YUV422P10LE", "YUV444P10LE"
+        "yuv420p8", "yuv422p8", "yuv444p8",
+        "yuv420p10le", "yuv422p10le", "yuv444p10le"
     });
     connect(combo_format_b_, &QComboBox::currentTextChanged, this, &MainWindow::on_format_b_changed);
 
@@ -243,7 +243,10 @@ void MainWindow::open_file(const QString& which) {
     auto combo = (which == "a") ? combo_format_a_ : combo_format_b_;
     if (auto_fmt.has_value()) {
         std::string fmt_str = to_string(auto_fmt->first) + to_string(auto_fmt->second);
-        int idx = combo->findText(QString::fromStdString(fmt_str));
+        int idx = combo->findText(QString::fromStdString(fmt_str), Qt::MatchFixedString);
+        if (idx < 0) {
+            idx = combo->findText(QString::fromStdString(fmt_str), Qt::MatchContains);
+        }
         if (idx >= 0) {
             QSignalBlocker b(combo);
             combo->setCurrentIndex(idx);
