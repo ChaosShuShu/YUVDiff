@@ -70,7 +70,23 @@ if [ ${#MISSING_DEPS[@]} -ne 0 ]; then
     exit 1
 fi
 
-echo -e "Dependencies verified."
+# Check Qt6 for GUI
+if [ "$CLI_ONLY" = false ]; then
+    HAS_QT6=false
+    if pkg-config --exists Qt6Widgets Qt6OpenGLWidgets 2>/dev/null || command -v qmake6 &>/dev/null; then
+        HAS_QT6=true
+    fi
+    if [ "$HAS_QT6" = false ]; then
+        echo -e "${COLOR_YELLOW}[Notice] Qt6 development libraries not detected.${COLOR_RESET}"
+        echo -e "If you want to build the graphical interface (yuvdiff-gui), please install:"
+        echo -e "  Ubuntu/Debian: ${COLOR_YELLOW}sudo apt install -y qt6-base-dev libqt6openglwidgets6-dev${COLOR_RESET}"
+        echo -e "  Fedora/RHEL:   ${COLOR_YELLOW}sudo dnf install -y qt6-qtbase-devel${COLOR_RESET}"
+        echo -e "  Arch Linux:    ${COLOR_YELLOW}sudo pacman -S qt6-base${COLOR_RESET}"
+        echo -e "Otherwise, CMake will automatically build the headless CLI tool only.\n"
+    fi
+fi
+
+echo -e "Basic dependencies verified."
 
 # 2. CMake Configuration
 echo -e "\n${COLOR_GREEN}[2/4] Configuring project with CMake...${COLOR_RESET}"
@@ -108,11 +124,14 @@ echo -e "\n${COLOR_GREEN}[4/4] Running automated test suite...${COLOR_RESET}"
 echo -e "\n${COLOR_GREEN}======================================================${COLOR_RESET}"
 echo -e "${COLOR_GREEN}               Build Completed Successfully!          ${COLOR_RESET}"
 echo -e "${COLOR_GREEN}======================================================${COLOR_RESET}"
-echo -e "Executable binaries are available in:"
-echo -e "  - CLI Tool: ${COLOR_YELLOW}${BIN_DIR}/yuvdiff-cli${COLOR_RESET}"
+echo -e "Build Artifacts in ${COLOR_YELLOW}${BIN_DIR}/${COLOR_RESET}:"
+echo -e "  - CLI Tool: [OK] ${COLOR_YELLOW}${BIN_DIR}/yuvdiff-cli${COLOR_RESET}"
 if [ -f "${BUILD_DIR}/yuvdiff-gui" ]; then
-    echo -e "  - GUI App:  ${COLOR_YELLOW}${BIN_DIR}/yuvdiff-gui${COLOR_RESET}"
+    echo -e "  - GUI App:  [OK] ${COLOR_YELLOW}${BIN_DIR}/yuvdiff-gui${COLOR_RESET}"
+else
+    echo -e "  - GUI App:  ${COLOR_YELLOW}[SKIPPED]${COLOR_RESET} (Install Qt6/Qt6OpenGLWidgets development packages to build GUI)"
 fi
+
 echo -e "\nQuick start examples:"
 echo -e "  ${COLOR_BLUE}./bin/yuvdiff-cli --help${COLOR_RESET}"
 if [ -f "${BUILD_DIR}/yuvdiff-gui" ]; then
