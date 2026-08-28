@@ -5,6 +5,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    if (CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+        add_compile_options(-mavx2 -mfma)
+    endif()
+endif()
+
 # Core Library (No Qt dependency)
 add_library(yuvdiff_core STATIC
     cpp/src/formats.cpp
@@ -12,6 +18,7 @@ add_library(yuvdiff_core STATIC
     cpp/src/diff.cpp
     cpp/src/metrics.cpp
     cpp/src/renderer.cpp
+    cpp/src/tools.cpp
 )
 
 target_include_directories(yuvdiff_core PUBLIC
@@ -31,6 +38,7 @@ add_executable(yuvdiff_test
     cpp/tests/test_diff.cpp
     cpp/tests/test_metrics.cpp
     cpp/tests/test_renderer.cpp
+    cpp/tests/test_tools.cpp
 )
 target_include_directories(yuvdiff_test PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/tests

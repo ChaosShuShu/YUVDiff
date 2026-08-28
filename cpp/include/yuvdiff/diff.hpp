@@ -14,6 +14,11 @@ struct DiffResult {
     std::vector<uint8_t> mask;   // Upsampled binary mask at Y resolution (1 if diff > threshold, 0 otherwise)
     int64_t diff_pixel_count = 0;
     int64_t total_pixel_count = 0;
+
+    double diff_mean = 0.0;
+    double diff_median = 0.0;
+    int32_t diff_max = 0;
+    int32_t diff_min = 0;
 };
 
 class DiffEngine {

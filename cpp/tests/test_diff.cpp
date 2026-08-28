@@ -102,3 +102,30 @@ TEST_CASE(test_diff_cross_chroma_format) {
     DiffResult res = engine.diff(a, b);
     ASSERT_EQ(res.diff_pixel_count, 0LL);
 }
+
+TEST_CASE(test_diff_statistics) {
+    YUVFrame a = make_frame(4, 4, 10, 128, 128);
+    YUVFrame b = make_frame(4, 4, 10, 128, 128);
+
+    // Set specific diffs: 0, 10, 20, 30 across 16 pixels
+    // 4 pixels with diff 0 (10 vs 10)
+    // 4 pixels with diff 10 (10 vs 20)
+    // 4 pixels with diff 20 (10 vs 30)
+    // 4 pixels with diff 30 (10 vs 40)
+    for (int i = 4; i < 8; ++i) b.y8[i] = 20;
+    for (int i = 8; i < 12; ++i) b.y8[i] = 30;
+    for (int i = 12; i < 16; ++i) b.y8[i] = 40;
+
+    DiffEngine engine(4);
+    DiffResult res = engine.diff(a, b);
+
+    ASSERT_EQ(res.diff_min, 0);
+    ASSERT_EQ(res.diff_max, 30);
+    // Mean = (0*4 + 10*4 + 20*4 + 30*4) / 16 = 240 / 16 = 15.0
+    ASSERT_NEAR(res.diff_mean, 15.0, 0.001);
+    // Diffs: [0,0,0,0, 10,10,10,10, 20,20,20,20, 30,30,30,30]
+    // 16 elements: element 8 is 10, element 9 is 20 -> median = 15.0
+    ASSERT_NEAR(res.diff_median, 15.0, 0.001);
+    ASSERT_EQ(res.diff_pixel_count, 12LL); // 12 pixels > 4
+    ASSERT_EQ(res.total_pixel_count, 16LL);
+}

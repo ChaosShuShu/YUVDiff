@@ -74,6 +74,8 @@ void uniform_filter_2d(
     }
 }
 
+#include "yuvdiff/simd.hpp"
+
 double compute_channel_mse(const YUVFrame& a, const YUVFrame& b, char channel) {
     auto [hf_a, vf_a] = chroma_subsampling(a.pixel_format);
     auto [hf_b, vf_b] = chroma_subsampling(b.pixel_format);
@@ -84,6 +86,25 @@ double compute_channel_mse(const YUVFrame& a, const YUVFrame& b, char channel) {
     int h = (channel == 'y') ? a.height : (a.height / vf);
     size_t total = static_cast<size_t>(w) * h;
     if (total == 0) return 0.0;
+
+    // SIMD Fast Path for matching formats and depths
+    if (a.pixel_format == b.pixel_format && a.bit_depth == b.bit_depth) {
+        if (a.bit_depth == 8) {
+            const uint8_t* ptr_a = (channel == 'y') ? a.y8.data() : (channel == 'u' ? a.u8.data() : a.v8.data());
+            const uint8_t* ptr_b = (channel == 'y') ? b.y8.data() : (channel == 'u' ? b.u8.data() : b.v8.data());
+            if (ptr_a && ptr_b) {
+                uint64_t sum_sq = yuvdiff::simd::sq_diff_sum_8bit(ptr_a, ptr_b, total);
+                return static_cast<double>(sum_sq) / total;
+            }
+        } else if (a.bit_depth == 10) {
+            const uint16_t* ptr_a = (channel == 'y') ? a.y16.data() : (channel == 'u' ? a.u16.data() : a.v16.data());
+            const uint16_t* ptr_b = (channel == 'y') ? b.y16.data() : (channel == 'u' ? b.u16.data() : b.v16.data());
+            if (ptr_a && ptr_b) {
+                uint64_t sum_sq = yuvdiff::simd::sq_diff_sum_16bit(ptr_a, ptr_b, total);
+                return static_cast<double>(sum_sq) / total;
+            }
+        }
+    }
 
     double scale_a = (a.bit_depth == 8 && b.bit_depth == 10) ? 4.0 : 1.0;
     double scale_b = (b.bit_depth == 8 && a.bit_depth == 10) ? 4.0 : 1.0;
