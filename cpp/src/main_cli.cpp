@@ -325,9 +325,10 @@ int run_cmp(
     int64_t total_diff_frames = 0;
     int64_t total_diff_pixels = 0;
     int64_t total_all_pixels = 0;
-    double sum_mean_weighted = 0.0;
+    int64_t total_non_zero_diff_pixels = 0;
+    int64_t sum_diff_non_zero = 0;
     int32_t global_max = 0;
-    int32_t global_min = (num_frames > 0) ? 1000000 : 0;
+    int32_t global_min = 1000000;
     std::vector<uint64_t> global_hist(1024, 0);
 
     for (size_t i = 0; i < num_frames; ++i) {
@@ -348,13 +349,16 @@ int run_cmp(
         }
         total_diff_pixels += diff.diff_pixel_count;
         total_all_pixels += diff.total_pixel_count;
-        sum_mean_weighted += diff.diff_mean * diff.total_pixel_count;
         if (diff.diff_max > global_max) global_max = diff.diff_max;
-        if (diff.diff_min < global_min) global_min = diff.diff_min;
+        if (diff.diff_min > 0 && diff.diff_min < global_min) global_min = diff.diff_min;
 
         for (int32_t d : diff.diff_pixel) {
-            if (d >= 0 && d < 1024) global_hist[d]++;
-            else if (d >= 1024) global_hist[1023]++;
+            if (d > 0) {
+                total_non_zero_diff_pixels++;
+                sum_diff_non_zero += d;
+                if (d < 1024) global_hist[d]++;
+                else global_hist[1023]++;
+            }
         }
 
         double diff_ratio = (diff.total_pixel_count > 0)
@@ -373,28 +377,28 @@ int run_cmp(
         }
     }
 
-    if (num_frames == 0) {
-        global_min = 0;
-    }
-
     double global_diff_ratio = (total_all_pixels > 0)
         ? (static_cast<double>(total_diff_pixels) / total_all_pixels)
         : 0.0;
-    double global_mean = (total_all_pixels > 0)
-        ? (sum_mean_weighted / total_all_pixels)
-        : 0.0;
-
+    double global_mean = 0.0;
     double global_median = 0.0;
-    if (total_all_pixels > 0) {
-        uint64_t target = total_all_pixels / 2 + 1;
+
+    if (total_non_zero_diff_pixels > 0) {
+        global_mean = static_cast<double>(sum_diff_non_zero) / total_non_zero_diff_pixels;
+        uint64_t target = total_non_zero_diff_pixels / 2 + 1;
         uint64_t accum = 0;
-        for (int k = 0; k < 1024; ++k) {
+        for (int k = 1; k < 1024; ++k) {
             accum += global_hist[k];
             if (accum >= target) {
                 global_median = static_cast<double>(k);
                 break;
             }
         }
+    } else {
+        global_min = 0;
+        global_max = 0;
+        global_mean = 0.0;
+        global_median = 0.0;
     }
 
     std::cout << "total_frames=" << num_frames

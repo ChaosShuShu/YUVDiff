@@ -68,13 +68,13 @@ DiffResult DiffEngine::diff(const YUVFrame& a, const YUVFrame& b) const {
         }
     }
 
-    // Generate combined threshold mask & combined pixel difference stats
-    size_t total_samples = static_cast<size_t>(w) * h;
+    // Generate combined threshold mask & combined pixel difference stats (calculated for d > 0)
     int64_t diff_cnt = 0;
-    int64_t sum_diff = 0;
-    int32_t min_diff = (total_samples > 0) ? 1000000 : 0;
-    int32_t max_diff = 0;
-    std::vector<int> hist(1024, 0);
+    int64_t non_zero_cnt = 0;
+    int64_t sum_diff_non_zero = 0;
+    int32_t min_diff_non_zero = 1000000;
+    int32_t max_diff_non_zero = 0;
+    std::vector<int> hist_non_zero(1024, 0);
 
     for (int r = 0; r < h; ++r) {
         for (int c = 0; c < w; ++c) {
@@ -91,13 +91,17 @@ DiffResult DiffEngine::diff(const YUVFrame& a, const YUVFrame& b) const {
 
             int32_t d_pixel = std::max({dy, du, dv});
             result.diff_pixel[y_idx] = d_pixel;
-            sum_diff += d_pixel;
-            if (d_pixel < min_diff) min_diff = d_pixel;
-            if (d_pixel > max_diff) max_diff = d_pixel;
-            if (d_pixel >= 0 && d_pixel < 1024) {
-                hist[d_pixel]++;
-            } else if (d_pixel >= 1024) {
-                hist[1023]++;
+
+            if (d_pixel > 0) {
+                non_zero_cnt++;
+                sum_diff_non_zero += d_pixel;
+                if (d_pixel < min_diff_non_zero) min_diff_non_zero = d_pixel;
+                if (d_pixel > max_diff_non_zero) max_diff_non_zero = d_pixel;
+                if (d_pixel < 1024) {
+                    hist_non_zero[d_pixel]++;
+                } else {
+                    hist_non_zero[1023]++;
+                }
             }
 
             if (dy > threshold_ || du > threshold_ || dv > threshold_) {
@@ -108,30 +112,31 @@ DiffResult DiffEngine::diff(const YUVFrame& a, const YUVFrame& b) const {
     }
 
     result.diff_pixel_count = diff_cnt;
-    result.diff_min = (total_samples > 0) ? min_diff : 0;
-    result.diff_max = max_diff;
-    result.diff_mean = (total_samples > 0) ? (static_cast<double>(sum_diff) / total_samples) : 0.0;
 
-    // Fast and exact median from combined histogram
-    if (total_samples > 0) {
-        if (total_samples % 2 == 1) {
-            size_t target = total_samples / 2 + 1;
+    if (non_zero_cnt > 0) {
+        result.diff_min = min_diff_non_zero;
+        result.diff_max = max_diff_non_zero;
+        result.diff_mean = static_cast<double>(sum_diff_non_zero) / non_zero_cnt;
+
+        // Fast and exact median from non-zero histogram
+        if (non_zero_cnt % 2 == 1) {
+            size_t target = non_zero_cnt / 2 + 1;
             size_t accum = 0;
-            for (int i = 0; i < 1024; ++i) {
-                accum += hist[i];
+            for (int i = 1; i < 1024; ++i) {
+                accum += hist_non_zero[i];
                 if (accum >= target) {
                     result.diff_median = static_cast<double>(i);
                     break;
                 }
             }
         } else {
-            size_t target1 = total_samples / 2;
-            size_t target2 = total_samples / 2 + 1;
+            size_t target1 = non_zero_cnt / 2;
+            size_t target2 = non_zero_cnt / 2 + 1;
             size_t accum = 0;
             int val1 = -1;
             int val2 = -1;
-            for (int i = 0; i < 1024; ++i) {
-                accum += hist[i];
+            for (int i = 1; i < 1024; ++i) {
+                accum += hist_non_zero[i];
                 if (val1 == -1 && accum >= target1) {
                     val1 = i;
                 }
@@ -142,8 +147,12 @@ DiffResult DiffEngine::diff(const YUVFrame& a, const YUVFrame& b) const {
             }
             result.diff_median = (val1 + val2) / 2.0;
         }
+    } else {
+        result.diff_min = 0;
+        result.diff_max = 0;
+        result.diff_mean = 0.0;
+        result.diff_median = 0.0;
     }
-    result.diff_pixel_count = diff_cnt;
 
     return result;
 }

@@ -492,6 +492,20 @@ void YUVGLWidget::render_pixel_grid_and_values(
             int dv = std::abs(va - vb);
             int diff = std::max({dy, du, dv});
 
+            // Determine first diff component (Y, then U, then V)
+            char diff_chan = 'Y';
+            int val_a = ya, val_b = yb, d_val = dy;
+            if (dy > 0) {
+                diff_chan = 'Y';
+                val_a = ya; val_b = yb; d_val = dy;
+            } else if (du > 0) {
+                diff_chan = 'U';
+                val_a = ua; val_b = ub; d_val = du;
+            } else if (dv > 0) {
+                diff_chan = 'V';
+                val_a = va; val_b = vb; d_val = dv;
+            }
+
             auto draw_shadow_text = [&](const QRectF& rect, int align, const QString& text, const QColor& col) {
                 painter.setPen(QColor(0, 0, 0, 200));
                 painter.drawText(rect.translated(1, 1), align, text);
@@ -511,8 +525,13 @@ void YUVGLWidget::render_pixel_grid_and_values(
                 } else if (mode == RenderMode::ORIGINAL_A || !fb) {
                     text = QString::number(ya);
                 } else {
-                    text = QString("d%1").arg(diff);
-                    col = (diff > 0) ? QColor(255, 90, 90) : QColor(160, 255, 160);
+                    if (diff > 0) {
+                        text = QString("%1:d%2").arg(diff_chan).arg(d_val);
+                        col = QColor(255, 90, 90);
+                    } else {
+                        text = "d:0";
+                        col = QColor(160, 255, 160);
+                    }
                 }
                 draw_shadow_text(cell_rect, Qt::AlignCenter, text, col);
             } else {
@@ -531,10 +550,16 @@ void YUVGLWidget::render_pixel_grid_and_values(
                     draw_shadow_text(r2, Qt::AlignCenter, QString("U:%1").arg(ua), QColor(100, 220, 255));
                     draw_shadow_text(r3, Qt::AlignCenter, QString("V:%1").arg(va), QColor(255, 185, 95));
                 } else {
-                    draw_shadow_text(r1, Qt::AlignCenter, QString("Ya:%1 Yb:%2").arg(ya).arg(yb), (dy > 0 ? QColor(255, 120, 120) : QColor(255, 255, 255)));
-                    draw_shadow_text(r2, Qt::AlignCenter, QString("Ua:%1 Ub:%2").arg(ua).arg(ub), (du > 0 ? QColor(255, 150, 100) : QColor(100, 220, 255)));
-                    QColor diff_col = (diff > 0) ? QColor(255, 80, 80) : QColor(140, 255, 140);
-                    draw_shadow_text(r3, Qt::AlignCenter, QString("Δ: Y%1 U%2 V%3").arg(dy).arg(du).arg(dv), diff_col);
+                    // Diff views: Display first diff component only (e.g. U: A:2 B:3 d:1)
+                    if (diff > 0) {
+                        draw_shadow_text(r1, Qt::AlignCenter, QString("%1: A:%2").arg(diff_chan).arg(val_a), QColor(255, 255, 255));
+                        draw_shadow_text(r2, Qt::AlignCenter, QString("B:%1").arg(val_b), QColor(160, 210, 255));
+                        draw_shadow_text(r3, Qt::AlignCenter, QString("d:%1").arg(d_val), QColor(255, 80, 80));
+                    } else {
+                        draw_shadow_text(r1, Qt::AlignCenter, QString("Y:%1").arg(ya), QColor(255, 255, 255));
+                        draw_shadow_text(r2, Qt::AlignCenter, QString("U:%1 V:%2").arg(ua).arg(va), QColor(180, 220, 255));
+                        draw_shadow_text(r3, Qt::AlignCenter, QString("d:0"), QColor(140, 255, 140));
+                    }
                 }
             }
         }

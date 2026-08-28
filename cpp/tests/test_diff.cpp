@@ -119,13 +119,14 @@ TEST_CASE(test_diff_statistics) {
     DiffEngine engine(4);
     DiffResult res = engine.diff(a, b);
 
-    ASSERT_EQ(res.diff_min, 0);
+    // Only d > 0 pixels are calculated for min/max/mean/median:
+    // Non-zero pixels count = 12 (values: 4x10, 4x20, 4x30)
+    ASSERT_EQ(res.diff_min, 10);
     ASSERT_EQ(res.diff_max, 30);
-    // Mean = (0*4 + 10*4 + 20*4 + 30*4) / 16 = 240 / 16 = 15.0
-    ASSERT_NEAR(res.diff_mean, 15.0, 0.001);
-    // Diffs: [0,0,0,0, 10,10,10,10, 20,20,20,20, 30,30,30,30]
-    // 16 elements: element 8 is 10, element 9 is 20 -> median = 15.0
-    ASSERT_NEAR(res.diff_median, 15.0, 0.001);
+    // Mean = (10*4 + 20*4 + 30*4) / 12 = 240 / 12 = 20.0
+    ASSERT_NEAR(res.diff_mean, 20.0, 0.001);
+    // Diffs: [10,10,10,10, 20,20,20,20, 30,30,30,30] -> median = 20.0
+    ASSERT_NEAR(res.diff_median, 20.0, 0.001);
     ASSERT_EQ(res.diff_pixel_count, 12LL); // 12 pixels > 4
     ASSERT_EQ(res.total_pixel_count, 16LL);
 }
