@@ -102,3 +102,32 @@ class TestRendererThresholdMask:
         assert top_pixel.red() > top_pixel.green()
         assert top_pixel.red() > top_pixel.blue()
         assert abs(bottom_pixel.red() - bottom_pixel.blue()) < 30
+
+
+class TestRendererSideBySide:
+    def test_side_by_side_returns_double_width(self, qapp):
+        y = np.full((16, 16), 128, dtype=np.uint8)
+        u = np.full((8, 8), 128, dtype=np.uint8)
+        v = np.full((8, 8), 128, dtype=np.uint8)
+        a = make_frame(y, u, v, 16, 16)
+        b = make_frame(y, u, v, 16, 16)
+        r = Renderer(16, 16)
+        img = r.render(a, b, None, RenderMode.SIDE_BY_SIDE, threshold=4)
+        assert isinstance(img, QImage)
+        assert img.width() == 32
+        assert img.height() == 16
+
+
+class TestRendererComparison:
+    def test_comparison_returns_qimage(self, qapp):
+        y = np.full((16, 16), 128, dtype=np.uint8)
+        u = np.full((8, 8), 128, dtype=np.uint8)
+        v = np.full((8, 8), 128, dtype=np.uint8)
+        a = make_frame(y, u, v, 16, 16)
+        b = make_frame(y, u, v, 16, 16)
+        r = Renderer(16, 16)
+        img = r.render(a, b, None, RenderMode.COMPARISON, threshold=4)
+        assert isinstance(img, QImage)
+        assert img.width() == 16
+        assert img.height() == 16
+

@@ -108,6 +108,8 @@ void MainWindow::build_ui() {
     combo_mode_->addItem("ORIGINAL_B", static_cast<int>(RenderMode::ORIGINAL_B));
     combo_mode_->addItem("HEATMAP", static_cast<int>(RenderMode::HEATMAP));
     combo_mode_->addItem("THRESHOLD_MASK", static_cast<int>(RenderMode::THRESHOLD_MASK));
+    combo_mode_->addItem("SIDE_BY_SIDE", static_cast<int>(RenderMode::SIDE_BY_SIDE));
+    combo_mode_->addItem("COMPARISON", static_cast<int>(RenderMode::COMPARISON));
     connect(combo_mode_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::on_mode_changed);
 
     btn_export_current_ = new QPushButton("Export PNG", this);

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <stdexcept>
 
 namespace yuvdiff {
@@ -43,12 +44,51 @@ RgbImage Renderer::render(
                 throw std::invalid_argument("DiffResult is required for HEATMAP render mode");
             }
             return render_heatmap(*diff, frame_a.bit_depth);
-        case RenderMode::THRESHOLD_MASK:
+        case RenderMode::THRESHOLD_MASK: {
             if (!diff) {
                 throw std::invalid_argument("DiffResult is required for THRESHOLD_MASK render mode");
             }
             RgbImage rgb_a = yuv_to_rgb(frame_a);
             return render_mask(rgb_a, *diff);
+        }
+        case RenderMode::SIDE_BY_SIDE: {
+            if (!frame_b) {
+                return yuv_to_rgb(frame_a);
+            }
+            RgbImage rgb_a = yuv_to_rgb(frame_a);
+            RgbImage rgb_b = yuv_to_rgb(*frame_b);
+            int w = rgb_a.width;
+            int h = rgb_a.height;
+            RgbImage sbs;
+            sbs.width = w * 2;
+            sbs.height = h;
+            sbs.data.resize(static_cast<size_t>(sbs.width) * sbs.height * 3);
+            for (int r = 0; r < h; ++r) {
+                const uint8_t* src_a = rgb_a.scanline(r);
+                const uint8_t* src_b = rgb_b.scanline(r);
+                uint8_t* dst = sbs.data.data() + static_cast<size_t>(r) * sbs.width * 3;
+                std::memcpy(dst, src_a, static_cast<size_t>(w) * 3);
+                std::memcpy(dst + static_cast<size_t>(w) * 3, src_b, static_cast<size_t>(w) * 3);
+            }
+            return sbs;
+        }
+        case RenderMode::COMPARISON: {
+            if (!frame_b) {
+                return yuv_to_rgb(frame_a);
+            }
+            RgbImage rgb_a = yuv_to_rgb(frame_a);
+            RgbImage rgb_b = yuv_to_rgb(*frame_b);
+            int w = rgb_a.width;
+            int h = rgb_a.height;
+            int split_x = w / 2;
+            RgbImage comp = rgb_a;
+            for (int r = 0; r < h; ++r) {
+                const uint8_t* src_b = rgb_b.scanline(r) + static_cast<size_t>(split_x) * 3;
+                uint8_t* dst = comp.data.data() + (static_cast<size_t>(r) * w + split_x) * 3;
+                std::memcpy(dst, src_b, static_cast<size_t>(w - split_x) * 3);
+            }
+            return comp;
+        }
     }
     throw std::invalid_argument("Unknown RenderMode");
 }

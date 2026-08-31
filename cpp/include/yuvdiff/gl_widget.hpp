@@ -86,7 +86,11 @@ private:
         float scale_y,
         const std::shared_ptr<YUVFrame>& fa,
         const std::shared_ptr<YUVFrame>& fb,
-        RenderMode mode
+        RenderMode mode,
+        float vp_offset_x = 0.0f,
+        float vp_w = -1.0f,
+        float vp_offset_y = 0.0f,
+        float vp_h = -1.0f
     );
 
     std::unique_ptr<QOpenGLShaderProgram> shader_program_;
@@ -98,6 +102,10 @@ private:
     QPointF pan_offset_{0.0f, 0.0f};
     bool is_dragging_ = false;
     QPoint last_mouse_pos_;
+
+    // Comparison Wipe Line State
+    float wipe_pos_ = 0.5f; // [0.0, 1.0] normalized video X split position
+    bool is_dragging_wipe_ = false;
 
     // Texture IDs
     GLuint tex_y_a_ = 0, tex_u_a_ = 0, tex_v_a_ = 0;

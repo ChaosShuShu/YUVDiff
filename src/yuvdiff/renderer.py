@@ -28,6 +28,8 @@ class RenderMode(Enum):
     ORIGINAL_B = "b"
     HEATMAP = "heatmap"
     THRESHOLD_MASK = "mask"
+    SIDE_BY_SIDE = "side_by_side"
+    COMPARISON = "comparison"
 
 
 # BT.601 limited-range YUV -> RGB matrix.
@@ -86,9 +88,27 @@ class Renderer:
             assert diff is not None
             return self._heatmap_to_qimage(diff, frame_a)
         if mode == RenderMode.THRESHOLD_MASK:
-            assert diff is not None
+            if diff is None:
+                raise ValueError("DiffResult is required for THRESHOLD_MASK render mode")
             rgb = self._yuv_to_rgb(frame_a)
             return self._mask_to_qimage(rgb, diff, threshold)
+        if mode == RenderMode.SIDE_BY_SIDE:
+            if frame_b is None:
+                return self._rgb_to_qimage(self._yuv_to_rgb(frame_a))
+            rgb_a = self._yuv_to_rgb(frame_a)
+            rgb_b = self._yuv_to_rgb(frame_b)
+            sbs = np.concatenate([rgb_a, rgb_b], axis=1)
+            return self._rgb_to_qimage(sbs)
+        if mode == RenderMode.COMPARISON:
+            if frame_b is None:
+                return self._rgb_to_qimage(self._yuv_to_rgb(frame_a))
+            rgb_a = self._yuv_to_rgb(frame_a)
+            rgb_b = self._yuv_to_rgb(frame_b)
+            w = rgb_a.shape[1]
+            split_x = w // 2
+            comp = rgb_a.copy()
+            comp[:, split_x:, :] = rgb_b[:, split_x:, :]
+            return self._rgb_to_qimage(comp)
         raise ValueError(f"Unknown render mode: {mode}")
 
     def _yuv_to_rgb(self, frame: YUVFrame) -> np.ndarray:

@@ -145,3 +145,70 @@ TEST_CASE(test_frame_cache_lru) {
     cache.clear();
     ASSERT_EQ(cache.size(), 0ULL);
 }
+
+TEST_CASE(test_renderer_side_by_side) {
+    YUVFrame a;
+    a.width = 8;
+    a.height = 8;
+    a.pixel_format = PixelFormat::YUV444P;
+    a.bit_depth = 8;
+    a.y8.assign(64, 50);
+    a.u8.assign(64, 128);
+    a.v8.assign(64, 128);
+
+    YUVFrame b;
+    b.width = 8;
+    b.height = 8;
+    b.pixel_format = PixelFormat::YUV444P;
+    b.bit_depth = 8;
+    b.y8.assign(64, 150);
+    b.u8.assign(64, 128);
+    b.v8.assign(64, 128);
+
+    Renderer r(8, 8);
+    RgbImage img = r.render(a, &b, nullptr, RenderMode::SIDE_BY_SIDE);
+    ASSERT_EQ(img.width, 16);
+    ASSERT_EQ(img.height, 8);
+
+    // Left half (Video A)
+    size_t left_idx = (4 * 16 + 2) * 3;
+    ASSERT_EQ(img.data[left_idx], 50);
+
+    // Right half (Video B)
+    size_t right_idx = (4 * 16 + 10) * 3;
+    ASSERT_EQ(img.data[right_idx], 150);
+}
+
+TEST_CASE(test_renderer_comparison) {
+    YUVFrame a;
+    a.width = 8;
+    a.height = 8;
+    a.pixel_format = PixelFormat::YUV444P;
+    a.bit_depth = 8;
+    a.y8.assign(64, 50);
+    a.u8.assign(64, 128);
+    a.v8.assign(64, 128);
+
+    YUVFrame b;
+    b.width = 8;
+    b.height = 8;
+    b.pixel_format = PixelFormat::YUV444P;
+    b.bit_depth = 8;
+    b.y8.assign(64, 150);
+    b.u8.assign(64, 128);
+    b.v8.assign(64, 128);
+
+    Renderer r(8, 8);
+    RgbImage img = r.render(a, &b, nullptr, RenderMode::COMPARISON);
+    ASSERT_EQ(img.width, 8);
+    ASSERT_EQ(img.height, 8);
+
+    // Left half (col 1: Video A)
+    size_t left_idx = (4 * 8 + 1) * 3;
+    ASSERT_EQ(img.data[left_idx], 50);
+
+    // Right half (col 6: Video B)
+    size_t right_idx = (4 * 8 + 6) * 3;
+    ASSERT_EQ(img.data[right_idx], 150);
+}
+

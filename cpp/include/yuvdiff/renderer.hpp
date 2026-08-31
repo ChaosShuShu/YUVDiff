@@ -12,7 +12,9 @@ enum class RenderMode {
     ORIGINAL_A,
     ORIGINAL_B,
     HEATMAP,
-    THRESHOLD_MASK
+    THRESHOLD_MASK,
+    SIDE_BY_SIDE,
+    COMPARISON
 };
 
 struct RgbImage {

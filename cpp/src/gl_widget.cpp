@@ -38,10 +38,11 @@ uniform sampler2D tex_u_b;
 uniform sampler2D tex_v_b;
 
 uniform int u_has_b;
-uniform int u_mode; // 0: ORIGINAL_A, 1: ORIGINAL_B, 2: HEATMAP, 3: THRESHOLD_MASK
+uniform int u_mode; // 0: ORIGINAL_A, 1: ORIGINAL_B, 2: HEATMAP, 3: THRESHOLD_MASK, 4: SIDE_BY_SIDE, 5: COMPARISON
 uniform float u_threshold;
 uniform float u_scale_a;
 uniform float u_scale_b;
+uniform float u_wipe_pos; // [0.0, 1.0] split position
 
 vec3 yuv_to_rgb(float y, float u, float v) {
     float uc = u - 0.5;
@@ -83,6 +84,16 @@ void main() {
 
     if (u_mode == 1) {
         FragColor = vec4(yuv_to_rgb(yb, ub, vb), 1.0);
+        return;
+    }
+
+    // 5: COMPARISON (Wipe line split: Left Video A, Right Video B)
+    if (u_mode == 5) {
+        if (TexCoord.x <= u_wipe_pos) {
+            FragColor = vec4(yuv_to_rgb(ya, ua, va), 1.0);
+        } else {
+            FragColor = vec4(yuv_to_rgb(yb, ub, vb), 1.0);
+        }
         return;
     }
 
@@ -167,9 +178,16 @@ void YUVGLWidget::wheelEvent(QWheelEvent* event) {
     float factor = (event->angleDelta().y() > 0) ? 1.15f : (1.0f / 1.15f);
     zoom_level_ = std::clamp(zoom_level_ * factor, 0.1f, 80.0f);
 
-    // Zoom centered at mouse cursor position
-    float mx = 2.0f * static_cast<float>(event->position().x()) / width() - 1.0f;
-    float my = 1.0f - 2.0f * static_cast<float>(event->position().y()) / height();
+    bool is_sbs = (mode_ == RenderMode::SIDE_BY_SIDE);
+    float vp_w = is_sbs ? (width() / 2.0f) : static_cast<float>(width());
+    float vp_h = static_cast<float>(height());
+    float sx = static_cast<float>(event->position().x());
+    if (is_sbs && sx >= vp_w) {
+        sx -= vp_w;
+    }
+
+    float mx = 2.0f * sx / vp_w - 1.0f;
+    float my = 1.0f - 2.0f * static_cast<float>(event->position().y()) / vp_h;
 
     float ratio = zoom_level_ / old_zoom;
     pan_offset_.setX(mx - (mx - pan_offset_.x()) * ratio);
@@ -180,6 +198,36 @@ void YUVGLWidget::wheelEvent(QWheelEvent* event) {
 }
 
 void YUVGLWidget::mousePressEvent(QMouseEvent* event) {
+    if (event->button() == Qt::LeftButton && mode_ == RenderMode::COMPARISON) {
+        std::shared_ptr<YUVFrame> fa, fb;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            fa = frame_a_;
+            fb = frame_b_;
+        }
+        if (fa || fb) {
+            auto prim = fa ? fa : fb;
+            int video_w = prim->width;
+            int video_h = prim->height;
+            float widget_ratio = static_cast<float>(width()) / std::max(1, height());
+            float video_ratio = static_cast<float>(video_w) / std::max(1, video_h);
+            float scale_x = (widget_ratio > video_ratio) ? (video_ratio / widget_ratio) : 1.0f;
+
+            float aPos_x = wipe_pos_ * 2.0f - 1.0f;
+            float ndc_x = aPos_x * scale_x * zoom_level_ + pan_offset_.x();
+            float wipe_sx = (ndc_x + 1.0f) * 0.5f * width();
+
+            float mouse_x = static_cast<float>(event->position().x());
+            if (std::abs(mouse_x - wipe_sx) <= 14.0f) {
+                is_dragging_wipe_ = true;
+                last_mouse_pos_ = event->pos();
+                setCursor(Qt::SplitHCursor);
+                event->accept();
+                return;
+            }
+        }
+    }
+
     if (event->button() == Qt::LeftButton || event->button() == Qt::MiddleButton) {
         is_dragging_ = true;
         last_mouse_pos_ = event->pos();
@@ -190,10 +238,12 @@ void YUVGLWidget::mousePressEvent(QMouseEvent* event) {
 bool YUVGLWidget::screen_to_pixel(const QPointF& screen_pos, int& out_x, int& out_y) const {
     std::shared_ptr<YUVFrame> fa;
     std::shared_ptr<YUVFrame> fb;
+    RenderMode mode;
     {
         std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(mutex_));
         fa = frame_a_;
         fb = frame_b_;
+        mode = mode_;
     }
     if (!fa && !fb) return false;
 
@@ -201,13 +251,21 @@ bool YUVGLWidget::screen_to_pixel(const QPointF& screen_pos, int& out_x, int& ou
     int video_w = prim->width;
     int video_h = prim->height;
 
-    float widget_ratio = static_cast<float>(width()) / std::max(1, height());
+    bool is_sbs = (mode == RenderMode::SIDE_BY_SIDE);
+    float vp_w = is_sbs ? (width() / 2.0f) : static_cast<float>(width());
+    float vp_h = static_cast<float>(height());
+    float sx = static_cast<float>(screen_pos.x());
+    if (is_sbs && sx >= vp_w) {
+        sx -= vp_w;
+    }
+
+    float widget_ratio = vp_w / std::max(1.0f, vp_h);
     float video_ratio = static_cast<float>(video_w) / std::max(1, video_h);
     float scale_x = (widget_ratio > video_ratio) ? (video_ratio / widget_ratio) : 1.0f;
     float scale_y = (widget_ratio > video_ratio) ? 1.0f : (widget_ratio / video_ratio);
 
-    float ndc_x = 2.0f * static_cast<float>(screen_pos.x()) / width() - 1.0f;
-    float ndc_y = 1.0f - 2.0f * static_cast<float>(screen_pos.y()) / height();
+    float ndc_x = 2.0f * sx / vp_w - 1.0f;
+    float ndc_y = 1.0f - 2.0f * static_cast<float>(screen_pos.y()) / vp_h;
 
     float quad_x = (ndc_x - pan_offset_.x()) / (scale_x * zoom_level_);
     float quad_y = (ndc_y - pan_offset_.y()) / (scale_y * zoom_level_);
@@ -225,16 +283,68 @@ bool YUVGLWidget::screen_to_pixel(const QPointF& screen_pos, int& out_x, int& ou
 }
 
 void YUVGLWidget::mouseMoveEvent(QMouseEvent* event) {
+    std::shared_ptr<YUVFrame> fa, fb;
+    RenderMode mode;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        fa = frame_a_;
+        fb = frame_b_;
+        mode = mode_;
+    }
+
+    if (is_dragging_wipe_ && mode == RenderMode::COMPARISON && (fa || fb)) {
+        auto prim = fa ? fa : fb;
+        int video_w = prim->width;
+        int video_h = prim->height;
+        float widget_ratio = static_cast<float>(width()) / std::max(1, height());
+        float video_ratio = static_cast<float>(video_w) / std::max(1, video_h);
+        float scale_x = (widget_ratio > video_ratio) ? (video_ratio / widget_ratio) : 1.0f;
+
+        float sx = static_cast<float>(event->position().x());
+        float ndc_x = (sx / width()) * 2.0f - 1.0f;
+        float aPos_x = (ndc_x - pan_offset_.x()) / (scale_x * zoom_level_);
+        float u = (aPos_x + 1.0f) * 0.5f;
+        wipe_pos_ = std::clamp(u, 0.0f, 1.0f);
+        setCursor(Qt::SplitHCursor);
+        update();
+        event->accept();
+        return;
+    }
+
     if (is_dragging_) {
         QPoint delta = event->pos() - last_mouse_pos_;
         last_mouse_pos_ = event->pos();
 
-        float dx = 2.0f * static_cast<float>(delta.x()) / width();
+        bool is_sbs = (mode == RenderMode::SIDE_BY_SIDE);
+        float vp_w = is_sbs ? (width() / 2.0f) : static_cast<float>(width());
+        float dx = 2.0f * static_cast<float>(delta.x()) / vp_w;
         float dy = -2.0f * static_cast<float>(delta.y()) / height();
         pan_offset_ += QPointF(dx, dy);
 
         update();
         event->accept();
+    }
+
+    if (mode == RenderMode::COMPARISON && (fa || fb)) {
+        auto prim = fa ? fa : fb;
+        int video_w = prim->width;
+        int video_h = prim->height;
+        float widget_ratio = static_cast<float>(width()) / std::max(1, height());
+        float video_ratio = static_cast<float>(video_w) / std::max(1, video_h);
+        float scale_x = (widget_ratio > video_ratio) ? (video_ratio / widget_ratio) : 1.0f;
+
+        float aPos_x = wipe_pos_ * 2.0f - 1.0f;
+        float ndc_x = aPos_x * scale_x * zoom_level_ + pan_offset_.x();
+        float wipe_sx = (ndc_x + 1.0f) * 0.5f * width();
+
+        float mouse_x = static_cast<float>(event->position().x());
+        if (std::abs(mouse_x - wipe_sx) <= 10.0f) {
+            setCursor(Qt::SplitHCursor);
+        } else if (!is_dragging_ && cursor().shape() == Qt::SplitHCursor) {
+            unsetCursor();
+        }
+    } else if (!is_dragging_ && cursor().shape() == Qt::SplitHCursor) {
+        unsetCursor();
     }
 
     // Inspect pixel under cursor
@@ -243,14 +353,6 @@ void YUVGLWidget::mouseMoveEvent(QMouseEvent* event) {
         PixelInfo info;
         info.x = px;
         info.y = py;
-
-        std::shared_ptr<YUVFrame> fa;
-        std::shared_ptr<YUVFrame> fb;
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-            fa = frame_a_;
-            fb = frame_b_;
-        }
 
         if (fa && px >= 0 && px < fa->width && py >= 0 && py < fa->height) {
             auto [h_sub, v_sub] = chroma_subsampling(fa->pixel_format);
@@ -284,12 +386,16 @@ void YUVGLWidget::mouseMoveEvent(QMouseEvent* event) {
 void YUVGLWidget::mouseReleaseEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton || event->button() == Qt::MiddleButton) {
         is_dragging_ = false;
+        is_dragging_wipe_ = false;
         event->accept();
     }
 }
 
 void YUVGLWidget::mouseDoubleClickEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
+        if (mode_ == RenderMode::COMPARISON) {
+            wipe_pos_ = 0.5f;
+        }
         reset_zoom_pan();
         event->accept();
     }
@@ -399,10 +505,14 @@ void YUVGLWidget::render_pixel_grid_and_values(
     float scale_y,
     const std::shared_ptr<YUVFrame>& fa,
     const std::shared_ptr<YUVFrame>& fb,
-    RenderMode mode
+    RenderMode mode,
+    float vp_offset_x,
+    float vp_w_param,
+    float vp_offset_y,
+    float vp_h_param
 ) {
-    float vp_w = static_cast<float>(width());
-    float vp_h = static_cast<float>(height());
+    float vp_w = (vp_w_param > 0.0f) ? vp_w_param : static_cast<float>(width());
+    float vp_h = (vp_h_param > 0.0f) ? vp_h_param : static_cast<float>(height());
 
     float pixel_w_screen = (vp_w / video_w) * scale_x * zoom_level_;
     float pixel_h_screen = (vp_h / video_h) * scale_y * zoom_level_;
@@ -411,36 +521,49 @@ void YUVGLWidget::render_pixel_grid_and_values(
         return;
     }
 
+    painter.save();
+    if (vp_w_param > 0.0f || vp_h_param > 0.0f) {
+        painter.setClipRect(QRectF(vp_offset_x, vp_offset_y, vp_w, vp_h));
+    }
+
     auto get_screen_x = [&](float col) -> float {
         float aPos_x = (col / video_w) * 2.0f - 1.0f;
         float ndc_x = aPos_x * scale_x * zoom_level_ + pan_offset_.x();
-        return (ndc_x + 1.0f) * 0.5f * vp_w;
+        return vp_offset_x + (ndc_x + 1.0f) * 0.5f * vp_w;
     };
 
     auto get_screen_y = [&](float row) -> float {
         float aPos_y = 1.0f - (row / video_h) * 2.0f;
         float ndc_y = aPos_y * scale_y * zoom_level_ + pan_offset_.y();
-        return (1.0f - ndc_y) * 0.5f * vp_h;
+        return vp_offset_y + (1.0f - ndc_y) * 0.5f * vp_h;
     };
 
     auto screen_to_col = [&](float sx) -> float {
-        float ndc_x = (sx / vp_w) * 2.0f - 1.0f;
+        float ndc_x = ((sx - vp_offset_x) / vp_w) * 2.0f - 1.0f;
         float aPos_x = (ndc_x - pan_offset_.x()) / (scale_x * zoom_level_);
         return (aPos_x + 1.0f) * 0.5f * video_w;
     };
 
     auto screen_to_row = [&](float sy) -> float {
-        float ndc_y = 1.0f - (sy / vp_h) * 2.0f;
+        float ndc_y = 1.0f - ((sy - vp_offset_y) / vp_h) * 2.0f;
         float aPos_y = (ndc_y - pan_offset_.y()) / (scale_y * zoom_level_);
         return (1.0f - aPos_y) * 0.5f * video_h;
     };
 
-    int c_min = std::clamp(static_cast<int>(std::floor(screen_to_col(0.0f))), 0, video_w - 1);
-    int c_max = std::clamp(static_cast<int>(std::ceil(screen_to_col(vp_w))), 0, video_w - 1);
-    int r_min = std::clamp(static_cast<int>(std::floor(screen_to_row(0.0f))), 0, video_h - 1);
-    int r_max = std::clamp(static_cast<int>(std::ceil(screen_to_row(vp_h))), 0, video_h - 1);
+    float col_left = screen_to_col(vp_offset_x);
+    float col_right = screen_to_col(vp_offset_x + vp_w);
+    float row_top = screen_to_row(vp_offset_y);
+    float row_bottom = screen_to_row(vp_offset_y + vp_h);
 
-    if (c_min > c_max || r_min > r_max) return;
+    int c_min = std::clamp(static_cast<int>(std::floor(std::min(col_left, col_right))), 0, video_w - 1);
+    int c_max = std::clamp(static_cast<int>(std::ceil(std::max(col_left, col_right))), 0, video_w - 1);
+    int r_min = std::clamp(static_cast<int>(std::floor(std::min(row_top, row_bottom))), 0, video_h - 1);
+    int r_max = std::clamp(static_cast<int>(std::ceil(std::max(row_top, row_bottom))), 0, video_h - 1);
+
+    if (c_min > c_max || r_min > r_max) {
+        painter.restore();
+        return;
+    }
 
     // 1. Draw Crisp Grid Lines
     QPen grid_pen(QColor(255, 255, 255, 80));
@@ -472,6 +595,8 @@ void YUVGLWidget::render_pixel_grid_and_values(
         : std::clamp(static_cast<int>(pixel_w_screen / 5.0f), 8, 20);
     font.setPixelSize(font_pixel_size);
     painter.setFont(font);
+
+    float wipe_col_split = wipe_pos_ * video_w;
 
     for (int r = r_min; r <= r_max; ++r) {
         for (int c = c_min; c <= c_max; ++c) {
@@ -516,13 +641,24 @@ void YUVGLWidget::render_pixel_grid_and_values(
                 painter.drawText(rect, align, text);
             };
 
+            bool show_b = (mode == RenderMode::ORIGINAL_B);
+            bool show_a = (mode == RenderMode::ORIGINAL_A || !fb);
+            if (mode == RenderMode::COMPARISON) {
+                if (static_cast<float>(c) > wipe_col_split && fb) {
+                    show_b = true;
+                    show_a = false;
+                } else {
+                    show_a = true;
+                    show_b = false;
+                }
+            }
+
             if (is_compact) {
-                // Compact single-line display
                 QString text;
                 QColor col = QColor(255, 255, 255);
-                if (mode == RenderMode::ORIGINAL_B && fb) {
+                if (show_b && fb) {
                     text = QString::number(yb);
-                } else if (mode == RenderMode::ORIGINAL_A || !fb) {
+                } else if (show_a) {
                     text = QString::number(ya);
                 } else {
                     if (diff > 0) {
@@ -535,22 +671,20 @@ void YUVGLWidget::render_pixel_grid_and_values(
                 }
                 draw_shadow_text(cell_rect, Qt::AlignCenter, text, col);
             } else {
-                // Full 3-line multi-color display
                 float line_h = cell_rect.height() / 3.0f;
                 QRectF r1(cell_rect.x(), cell_rect.y(), cell_rect.width(), line_h);
                 QRectF r2(cell_rect.x(), cell_rect.y() + line_h, cell_rect.width(), line_h);
                 QRectF r3(cell_rect.x(), cell_rect.y() + 2.0f * line_h, cell_rect.width(), line_h);
 
-                if (mode == RenderMode::ORIGINAL_B && fb) {
+                if (show_b && fb) {
                     draw_shadow_text(r1, Qt::AlignCenter, QString("Y:%1").arg(yb), QColor(255, 255, 255));
                     draw_shadow_text(r2, Qt::AlignCenter, QString("U:%1").arg(ub), QColor(100, 220, 255));
                     draw_shadow_text(r3, Qt::AlignCenter, QString("V:%1").arg(vb), QColor(255, 185, 95));
-                } else if (mode == RenderMode::ORIGINAL_A || !fb) {
+                } else if (show_a) {
                     draw_shadow_text(r1, Qt::AlignCenter, QString("Y:%1").arg(ya), QColor(255, 255, 255));
                     draw_shadow_text(r2, Qt::AlignCenter, QString("U:%1").arg(ua), QColor(100, 220, 255));
                     draw_shadow_text(r3, Qt::AlignCenter, QString("V:%1").arg(va), QColor(255, 185, 95));
                 } else {
-                    // Diff views: Display first diff component only (e.g. U: A:2 B:3 d:1)
                     if (diff > 0) {
                         draw_shadow_text(r1, Qt::AlignCenter, QString("%1: A:%2").arg(diff_chan).arg(val_a), QColor(255, 255, 255));
                         draw_shadow_text(r2, Qt::AlignCenter, QString("B:%1").arg(val_b), QColor(160, 210, 255));
@@ -564,6 +698,8 @@ void YUVGLWidget::render_pixel_grid_and_values(
             }
         }
     }
+
+    painter.restore();
 }
 
 void YUVGLWidget::paintEvent(QPaintEvent* event) {
@@ -577,7 +713,7 @@ void YUVGLWidget::paintEvent(QPaintEvent* event) {
 
     painter.endNativePainting();
 
-    // 2. Render 2D Vector Overlay (Grid lines & In-pixel text badges)
+    // 2. Render 2D Vector Overlay
     std::shared_ptr<YUVFrame> fa;
     std::shared_ptr<YUVFrame> fb;
     RenderMode mode;
@@ -588,19 +724,94 @@ void YUVGLWidget::paintEvent(QPaintEvent* event) {
         mode = mode_;
     }
 
-    if (fa || fb) {
-        auto primary_frame = fa ? fa : fb;
-        int video_w = primary_frame->width;
-        int video_h = primary_frame->height;
+    if (!fa && !fb) return;
 
+    auto primary_frame = fa ? fa : fb;
+    int video_w = primary_frame->width;
+    int video_h = primary_frame->height;
+
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
+
+    if (mode == RenderMode::SIDE_BY_SIDE) {
+        float half_w = width() / 2.0f;
+        float full_h = static_cast<float>(height());
+
+        float sbs_widget_ratio = half_w / std::max(1.0f, full_h);
+        float sbs_video_ratio = static_cast<float>(video_w) / std::max(1, video_h);
+        float s_x = (sbs_widget_ratio > sbs_video_ratio) ? (sbs_video_ratio / sbs_widget_ratio) : 1.0f;
+        float s_y = (sbs_widget_ratio > sbs_video_ratio) ? 1.0f : (sbs_widget_ratio / sbs_video_ratio);
+
+        // Render pixel grid in left pane (Video A)
+        render_pixel_grid_and_values(painter, video_w, video_h, s_x, s_y, fa, fb, RenderMode::ORIGINAL_A, 0.0f, half_w, 0.0f, full_h);
+
+        // Render pixel grid in right pane (Video B)
+        render_pixel_grid_and_values(painter, video_w, video_h, s_x, s_y, fa, fb, RenderMode::ORIGINAL_B, half_w, half_w, 0.0f, full_h);
+
+        // Center vertical divider
+        painter.setPen(QPen(QColor(0, 0, 0, 180), 4));
+        painter.drawLine(QPointF(half_w, 0), QPointF(half_w, full_h));
+        painter.setPen(QPen(QColor(64, 158, 255, 200), 2, Qt::DashLine));
+        painter.drawLine(QPointF(half_w, 0), QPointF(half_w, full_h));
+
+        // Pane header labels
+        auto draw_badge = [&](float cx, float cy, const QString& title, const QColor& text_col) {
+            QRectF rect(cx - 55, cy - 12, 110, 24);
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(QColor(15, 20, 28, 200));
+            painter.drawRoundedRect(rect, 4, 4);
+            painter.setPen(text_col);
+            painter.setFont(QFont("sans-serif", 9, QFont::Bold));
+            painter.drawText(rect, Qt::AlignCenter, title);
+        };
+
+        draw_badge(half_w * 0.5f, 22.0f, "Video A (Left)", QColor(255, 255, 255));
+        draw_badge(half_w * 1.5f, 22.0f, "Video B (Right)", QColor(100, 200, 255));
+    } else {
         float widget_ratio = static_cast<float>(width()) / std::max(1, height());
         float video_ratio = static_cast<float>(video_w) / std::max(1, video_h);
         float scale_x = (widget_ratio > video_ratio) ? (video_ratio / widget_ratio) : 1.0f;
         float scale_y = (widget_ratio > video_ratio) ? 1.0f : (widget_ratio / video_ratio);
 
-        painter.setRenderHint(QPainter::Antialiasing, true);
-        painter.setRenderHint(QPainter::TextAntialiasing, true);
         render_pixel_grid_and_values(painter, video_w, video_h, scale_x, scale_y, fa, fb, mode);
+
+        if (mode == RenderMode::COMPARISON && fa && fb) {
+            // Draw Wipe vertical divider line
+            float aPos_x = wipe_pos_ * 2.0f - 1.0f;
+            float ndc_x = aPos_x * scale_x * zoom_level_ + pan_offset_.x();
+            float wipe_sx = (ndc_x + 1.0f) * 0.5f * width();
+
+            float aPos_y_top = 1.0f;
+            float aPos_y_bot = -1.0f;
+            float ndc_y_top = aPos_y_top * scale_y * zoom_level_ + pan_offset_.y();
+            float ndc_y_bot = aPos_y_bot * scale_y * zoom_level_ + pan_offset_.y();
+            float screen_y_top = (1.0f - ndc_y_top) * 0.5f * height();
+            float screen_y_bot = (1.0f - ndc_y_bot) * 0.5f * height();
+
+            float y_min = std::max(0.0f, std::min(screen_y_top, screen_y_bot));
+            float y_max = std::min(static_cast<float>(height()), std::max(screen_y_top, screen_y_bot));
+
+            if (wipe_sx >= 0.0f && wipe_sx <= width()) {
+                // Outer shadow
+                painter.setPen(QPen(QColor(0, 0, 0, 180), 4));
+                painter.drawLine(QPointF(wipe_sx, y_min), QPointF(wipe_sx, y_max));
+
+                // Bright cyan divider line
+                painter.setPen(QPen(QColor(64, 158, 255, 240), 2, Qt::SolidLine));
+                painter.drawLine(QPointF(wipe_sx, y_min), QPointF(wipe_sx, y_max));
+
+                // Center circular handle
+                float cy = (y_min + y_max) * 0.5f;
+                QRectF badge_rect(wipe_sx - 38, cy - 14, 76, 28);
+                painter.setPen(QPen(QColor(64, 158, 255), 1.5));
+                painter.setBrush(QColor(18, 24, 36, 220));
+                painter.drawRoundedRect(badge_rect, 14, 14);
+
+                painter.setFont(QFont("sans-serif", 9, QFont::Bold));
+                painter.setPen(QColor(255, 255, 255));
+                painter.drawText(badge_rect, Qt::AlignCenter, "◀ A | B ▶");
+            }
+        }
     }
 
     painter.end();
@@ -628,16 +839,15 @@ void YUVGLWidget::paintGL() {
     int video_w = primary_frame->width;
     int video_h = primary_frame->height;
 
+    const qreal dpr = devicePixelRatioF();
+    int fb_w = std::max(1, static_cast<int>(std::round(width() * dpr)));
+    int fb_h = std::max(1, static_cast<int>(std::round(height() * dpr)));
+
     // Aspect ratio letterbox calculation
     float widget_ratio = static_cast<float>(width()) / std::max(1, height());
     float video_ratio = static_cast<float>(video_w) / std::max(1, video_h);
-    float scale_x = 1.0f;
-    float scale_y = 1.0f;
-    if (widget_ratio > video_ratio) {
-        scale_x = video_ratio / widget_ratio;
-    } else {
-        scale_y = widget_ratio / video_ratio;
-    }
+    float scale_x = (widget_ratio > video_ratio) ? (video_ratio / widget_ratio) : 1.0f;
+    float scale_y = (widget_ratio > video_ratio) ? 1.0f : (widget_ratio / video_ratio);
 
     // High Zoom: switch to GL_NEAREST for crisp square pixels
     float pixel_w_screen = (static_cast<float>(width()) / video_w) * scale_x * zoom_level_;
@@ -697,23 +907,59 @@ void YUVGLWidget::paintGL() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, mag_filter);
     shader_program_->setUniformValue("tex_v_b", 5);
 
-    shader_program_->setUniformValue("uScale", QVector2D(scale_x, scale_y));
-    shader_program_->setUniformValue("uPan", QVector2D(static_cast<float>(pan_offset_.x()), static_cast<float>(pan_offset_.y())));
-    shader_program_->setUniformValue("uZoom", zoom_level_);
-    shader_program_->setUniformValue("u_has_b", fb ? 1 : 0);
-    shader_program_->setUniformValue("u_mode", static_cast<int>(mode));
-
     float max_val = (primary_frame->bit_depth == 8) ? 255.0f : 1023.0f;
     shader_program_->setUniformValue("u_threshold", static_cast<float>(threshold) / max_val);
+    shader_program_->setUniformValue("u_has_b", fb ? 1 : 0);
+    shader_program_->setUniformValue("u_wipe_pos", wipe_pos_);
 
     float scale_a = (fa && fa->bit_depth != 8) ? (65535.0f / 1023.0f) : 1.0f;
     float scale_b = (fb && fb->bit_depth != 8) ? (65535.0f / 1023.0f) : 1.0f;
     shader_program_->setUniformValue("u_scale_a", scale_a);
     shader_program_->setUniformValue("u_scale_b", scale_b);
 
-    vao_.bind();
-    glDrawArrays(GL_TRIANGLES, 0, 6);
-    vao_.release();
+    if (mode == RenderMode::SIDE_BY_SIDE) {
+        int half_fb_w = fb_w / 2;
+
+        float sbs_widget_ratio = (static_cast<float>(width()) * 0.5f) / std::max(1, height());
+        float sbs_video_ratio = static_cast<float>(video_w) / std::max(1, video_h);
+        float sbs_scale_x = (sbs_widget_ratio > sbs_video_ratio) ? (sbs_video_ratio / sbs_widget_ratio) : 1.0f;
+        float sbs_scale_y = (sbs_widget_ratio > sbs_video_ratio) ? 1.0f : (sbs_widget_ratio / sbs_video_ratio);
+
+        shader_program_->setUniformValue("uScale", QVector2D(sbs_scale_x, sbs_scale_y));
+        shader_program_->setUniformValue("uPan", QVector2D(static_cast<float>(pan_offset_.x()), static_cast<float>(pan_offset_.y())));
+        shader_program_->setUniformValue("uZoom", zoom_level_);
+
+        glEnable(GL_SCISSOR_TEST);
+
+        // Viewport 1: Left (Video A)
+        glViewport(0, 0, half_fb_w, fb_h);
+        glScissor(0, 0, half_fb_w, fb_h);
+        shader_program_->setUniformValue("u_mode", 0); // ORIGINAL_A
+        vao_.bind();
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        vao_.release();
+
+        // Viewport 2: Right (Video B)
+        glViewport(half_fb_w, 0, fb_w - half_fb_w, fb_h);
+        glScissor(half_fb_w, 0, fb_w - half_fb_w, fb_h);
+        shader_program_->setUniformValue("u_mode", fb ? 1 : 0); // ORIGINAL_B
+        vao_.bind();
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        vao_.release();
+
+        glDisable(GL_SCISSOR_TEST);
+        glViewport(0, 0, fb_w, fb_h);
+    } else {
+        glViewport(0, 0, fb_w, fb_h);
+        shader_program_->setUniformValue("uScale", QVector2D(scale_x, scale_y));
+        shader_program_->setUniformValue("uPan", QVector2D(static_cast<float>(pan_offset_.x()), static_cast<float>(pan_offset_.y())));
+        shader_program_->setUniformValue("uZoom", zoom_level_);
+        shader_program_->setUniformValue("u_mode", static_cast<int>(mode));
+
+        vao_.bind();
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        vao_.release();
+    }
 
     shader_program_->release();
 
