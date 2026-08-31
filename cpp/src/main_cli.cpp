@@ -183,7 +183,7 @@ int run_diff(
     yuvdiff::MetricsCalculator metrics;
 
     if (!quiet) {
-        std::cout << "frame,psnr_y,psnr_u,psnr_v,psnr_total,ssim_y,diff_pixels,total_pixels,diff_mean,diff_median,diff_max,diff_min\n";
+        std::cout << "frame,psnr_y,psnr_u,psnr_v,psnr_total,ssim_y,diff_pixels,total_pixels,diff_ratio,diff_gt_2t,diff_gt_2t_ratio,diff_gt_t,diff_gt_t_ratio,diff_gt_half_t,diff_gt_half_t_ratio,diff_mean,diff_median,diff_max,diff_min\n";
     }
 
     bool has_any_diff = false;
@@ -216,6 +216,13 @@ int run_diff(
                       << format_float(ssim.y) << ","
                       << diff.diff_pixel_count << ","
                       << diff.total_pixel_count << ","
+                      << format_float(diff.diff_ratio) << ","
+                      << diff.diff_gt_2t << ","
+                      << format_float(diff.diff_gt_2t_ratio) << ","
+                      << diff.diff_gt_t << ","
+                      << format_float(diff.diff_gt_t_ratio) << ","
+                      << diff.diff_gt_half_t << ","
+                      << format_float(diff.diff_gt_half_t_ratio) << ","
                       << format_float(diff.diff_mean) << ","
                       << format_float(diff.diff_median) << ","
                       << diff.diff_max << ","
@@ -325,6 +332,9 @@ int run_cmp(
     int64_t total_diff_frames = 0;
     int64_t total_diff_pixels = 0;
     int64_t total_all_pixels = 0;
+    int64_t total_diff_gt_2t = 0;
+    int64_t total_diff_gt_t = 0;
+    int64_t total_diff_gt_half_t = 0;
     int64_t total_non_zero_diff_pixels = 0;
     int64_t sum_diff_non_zero = 0;
     int32_t global_max = 0;
@@ -349,6 +359,10 @@ int run_cmp(
         }
         total_diff_pixels += diff.diff_pixel_count;
         total_all_pixels += diff.total_pixel_count;
+        total_diff_gt_2t += diff.diff_gt_2t;
+        total_diff_gt_t += diff.diff_gt_t;
+        total_diff_gt_half_t += diff.diff_gt_half_t;
+
         if (diff.diff_max > global_max) global_max = diff.diff_max;
         if (diff.diff_min > 0 && diff.diff_min < global_min) global_min = diff.diff_min;
 
@@ -361,15 +375,17 @@ int run_cmp(
             }
         }
 
-        double diff_ratio = (diff.total_pixel_count > 0)
-            ? (static_cast<double>(diff.diff_pixel_count) / diff.total_pixel_count)
-            : 0.0;
-
         if (out_stream) {
             (*out_stream) << "frame=" << i
                           << " diff_pixels=" << diff.diff_pixel_count
                           << " total_pixels=" << diff.total_pixel_count
-                          << " diff_ratio=" << format_float(diff_ratio)
+                          << " diff_ratio=" << format_float(diff.diff_ratio)
+                          << " diff_gt_2t=" << diff.diff_gt_2t
+                          << " diff_gt_2t_ratio=" << format_float(diff.diff_gt_2t_ratio)
+                          << " diff_gt_t=" << diff.diff_gt_t
+                          << " diff_gt_t_ratio=" << format_float(diff.diff_gt_t_ratio)
+                          << " diff_gt_half_t=" << diff.diff_gt_half_t
+                          << " diff_gt_half_t_ratio=" << format_float(diff.diff_gt_half_t_ratio)
                           << " diff_mean=" << format_float(diff.diff_mean)
                           << " diff_median=" << format_float(diff.diff_median)
                           << " diff_max=" << diff.diff_max
@@ -380,6 +396,16 @@ int run_cmp(
     double global_diff_ratio = (total_all_pixels > 0)
         ? (static_cast<double>(total_diff_pixels) / total_all_pixels)
         : 0.0;
+    double global_gt_2t_ratio = (total_all_pixels > 0)
+        ? (static_cast<double>(total_diff_gt_2t) / total_all_pixels)
+        : 0.0;
+    double global_gt_t_ratio = (total_all_pixels > 0)
+        ? (static_cast<double>(total_diff_gt_t) / total_all_pixels)
+        : 0.0;
+    double global_gt_half_t_ratio = (total_all_pixels > 0)
+        ? (static_cast<double>(total_diff_gt_half_t) / total_all_pixels)
+        : 0.0;
+
     double global_mean = 0.0;
     double global_median = 0.0;
 
@@ -406,6 +432,12 @@ int run_cmp(
               << " diff_pixels=" << total_diff_pixels
               << " total_pixels=" << total_all_pixels
               << " diff_ratio=" << format_float(global_diff_ratio)
+              << " diff_gt_2t=" << total_diff_gt_2t
+              << " diff_gt_2t_ratio=" << format_float(global_gt_2t_ratio)
+              << " diff_gt_t=" << total_diff_gt_t
+              << " diff_gt_t_ratio=" << format_float(global_gt_t_ratio)
+              << " diff_gt_half_t=" << total_diff_gt_half_t
+              << " diff_gt_half_t_ratio=" << format_float(global_gt_half_t_ratio)
               << " diff_mean=" << format_float(global_mean)
               << " diff_median=" << format_float(global_median)
               << " diff_max=" << global_max

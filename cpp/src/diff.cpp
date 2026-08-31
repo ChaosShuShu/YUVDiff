@@ -69,12 +69,19 @@ DiffResult DiffEngine::diff(const YUVFrame& a, const YUVFrame& b) const {
     }
 
     // Generate combined threshold mask & combined pixel difference stats (calculated for d > 0)
-    int64_t diff_cnt = 0;
     int64_t non_zero_cnt = 0;
     int64_t sum_diff_non_zero = 0;
     int32_t min_diff_non_zero = 1000000;
     int32_t max_diff_non_zero = 0;
     std::vector<int> hist_non_zero(1024, 0);
+
+    result.threshold = threshold_;
+    result.threshold_half = threshold_ / 2;
+    result.threshold_2t = threshold_ * 2;
+
+    int64_t diff_gt_t_cnt = 0;
+    int64_t diff_gt_half_t_cnt = 0;
+    int64_t diff_gt_2t_cnt = 0;
 
     for (int r = 0; r < h; ++r) {
         for (int c = 0; c < w; ++c) {
@@ -102,16 +109,43 @@ DiffResult DiffEngine::diff(const YUVFrame& a, const YUVFrame& b) const {
                 } else {
                     hist_non_zero[1023]++;
                 }
+
+                if (d_pixel > result.threshold_half) {
+                    diff_gt_half_t_cnt++;
+                }
+                if (d_pixel > result.threshold) {
+                    diff_gt_t_cnt++;
+                }
+                if (d_pixel > result.threshold_2t) {
+                    diff_gt_2t_cnt++;
+                }
             }
 
-            if (dy > threshold_ || du > threshold_ || dv > threshold_) {
+            if (d_pixel > threshold_) {
                 result.mask[y_idx] = 1;
-                diff_cnt++;
             }
         }
     }
 
-    result.diff_pixel_count = diff_cnt;
+    result.diff_pixel_count = non_zero_cnt;
+    result.diff_ratio = (result.total_pixel_count > 0)
+        ? (static_cast<double>(result.diff_pixel_count) / result.total_pixel_count)
+        : 0.0;
+
+    result.diff_gt_half_t = diff_gt_half_t_cnt;
+    result.diff_gt_half_t_ratio = (result.total_pixel_count > 0)
+        ? (static_cast<double>(result.diff_gt_half_t) / result.total_pixel_count)
+        : 0.0;
+
+    result.diff_gt_t = diff_gt_t_cnt;
+    result.diff_gt_t_ratio = (result.total_pixel_count > 0)
+        ? (static_cast<double>(result.diff_gt_t) / result.total_pixel_count)
+        : 0.0;
+
+    result.diff_gt_2t = diff_gt_2t_cnt;
+    result.diff_gt_2t_ratio = (result.total_pixel_count > 0)
+        ? (static_cast<double>(result.diff_gt_2t) / result.total_pixel_count)
+        : 0.0;
 
     if (non_zero_cnt > 0) {
         result.diff_min = min_diff_non_zero;

@@ -57,6 +57,10 @@ class TestDiffBasic:
         result = engine.diff(a, b)
         assert result.diff_y.max() == 4
         assert result.mask.sum() == 0
+        assert result.diff_pixel_count == 16  # strictly d > 0
+        assert result.diff_gt_2t == 0         # d > 8 is 0
+        assert result.diff_gt_t == 0          # d > 4 is 0
+        assert result.diff_gt_half_t == 16   # d > 2 is 16
 
     def test_threshold_boundary_includes_above(self):
         y_a = np.zeros((4, 4), dtype=np.uint8)
@@ -66,6 +70,9 @@ class TestDiffBasic:
         engine = DiffEngine(threshold=4)
         result = engine.diff(a, b)
         assert result.mask.sum() == 16
+        assert result.diff_pixel_count == 16
+        assert result.diff_gt_t == 16
+        assert result.diff_gt_2t == 0
 
 
 class TestDiffPerChannel:

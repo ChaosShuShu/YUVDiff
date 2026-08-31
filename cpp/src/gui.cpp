@@ -447,7 +447,8 @@ void MainWindow::on_frame_ready(const yuvdiff::FrameReadyData& data) {
             << std::fixed << std::setprecision(2)
             << "PSNR Y=" << data.psnr.y << " U=" << data.psnr.u << " V=" << data.psnr.v << " T=" << data.psnr.total << "  |  "
             << std::setprecision(4) << "SSIM Y=" << data.ssim.y << "  |  "
-            << std::setprecision(2) << "Diff: " << pct << "% (" << data.diff_pixels << "/" << data.total_pixels << ")"
+            << std::setprecision(2) << "Diff(d>0): " << pct << "% (" << data.diff_pixels << "/" << data.total_pixels << ") "
+            << "[>2t:" << data.diff_gt_2t << ", >t:" << data.diff_gt_t << ", >t/2:" << data.diff_gt_half_t << "]"
             << align_info.toStdString();
 
         lbl_metrics_->setText(QString::fromStdString(oss.str()));

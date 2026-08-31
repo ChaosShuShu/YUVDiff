@@ -128,6 +128,17 @@ void AsyncRenderWorker::process_request(const Request& req) {
             data.ssim = cached->ssim;
             data.diff_pixels = cached->diff_pixels;
             data.total_pixels = cached->total_pixels;
+            data.diff_ratio = cached->diff_ratio;
+            data.diff_gt_half_t = cached->diff_gt_half_t;
+            data.diff_gt_half_t_ratio = cached->diff_gt_half_t_ratio;
+            data.diff_gt_t = cached->diff_gt_t;
+            data.diff_gt_t_ratio = cached->diff_gt_t_ratio;
+            data.diff_gt_2t = cached->diff_gt_2t;
+            data.diff_gt_2t_ratio = cached->diff_gt_2t_ratio;
+            data.diff_mean = cached->diff_mean;
+            data.diff_median = cached->diff_median;
+            data.diff_max = cached->diff_max;
+            data.diff_min = cached->diff_min;
             emit frameReady(data);
         }
         return;
@@ -154,12 +165,13 @@ void AsyncRenderWorker::process_request(const Request& req) {
             // 2. METRICS PATH: Fast PSNR always, full SSIM and Diff when not high-speed playing
             PSNRResult psnr = metrics_calc_.psnr(*fa, *fb);
             SSIMResult ssim;
+            DiffResult diff;
             int64_t diff_pixels = 0;
             int64_t total_pixels = static_cast<int64_t>(fa->width) * fa->height;
 
             if (!is_playing_) {
                 diff_engine_.set_threshold(req.threshold);
-                DiffResult diff = diff_engine_.diff(*fa, *fb);
+                diff = diff_engine_.diff(*fa, *fb);
                 diff_pixels = diff.diff_pixel_count;
                 total_pixels = diff.total_pixel_count;
                 ssim = metrics_calc_.ssim(*fa, *fb);
@@ -175,6 +187,17 @@ void AsyncRenderWorker::process_request(const Request& req) {
             item.ssim = ssim;
             item.diff_pixels = diff_pixels;
             item.total_pixels = total_pixels;
+            item.diff_ratio = diff.diff_ratio;
+            item.diff_gt_half_t = diff.diff_gt_half_t;
+            item.diff_gt_half_t_ratio = diff.diff_gt_half_t_ratio;
+            item.diff_gt_t = diff.diff_gt_t;
+            item.diff_gt_t_ratio = diff.diff_gt_t_ratio;
+            item.diff_gt_2t = diff.diff_gt_2t;
+            item.diff_gt_2t_ratio = diff.diff_gt_2t_ratio;
+            item.diff_mean = diff.diff_mean;
+            item.diff_median = diff.diff_median;
+            item.diff_max = diff.diff_max;
+            item.diff_min = diff.diff_min;
             cache_.put(item);
 
             if (!req.is_prefetch) {
@@ -189,6 +212,17 @@ void AsyncRenderWorker::process_request(const Request& req) {
                 data.ssim = ssim;
                 data.diff_pixels = diff_pixels;
                 data.total_pixels = total_pixels;
+                data.diff_ratio = diff.diff_ratio;
+                data.diff_gt_half_t = diff.diff_gt_half_t;
+                data.diff_gt_half_t_ratio = diff.diff_gt_half_t_ratio;
+                data.diff_gt_t = diff.diff_gt_t;
+                data.diff_gt_t_ratio = diff.diff_gt_t_ratio;
+                data.diff_gt_2t = diff.diff_gt_2t;
+                data.diff_gt_2t_ratio = diff.diff_gt_2t_ratio;
+                data.diff_mean = diff.diff_mean;
+                data.diff_median = diff.diff_median;
+                data.diff_max = diff.diff_max;
+                data.diff_min = diff.diff_min;
                 emit frameReady(data);
             }
         } else if (pa) {

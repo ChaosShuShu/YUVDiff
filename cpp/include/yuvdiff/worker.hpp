@@ -30,6 +30,17 @@ struct FrameReadyData {
     SSIMResult ssim;
     int64_t diff_pixels = 0;
     int64_t total_pixels = 0;
+    double diff_ratio = 0.0;
+    int64_t diff_gt_t = 0;
+    double diff_gt_t_ratio = 0.0;
+    int64_t diff_gt_half_t = 0;
+    double diff_gt_half_t_ratio = 0.0;
+    int64_t diff_gt_2t = 0;
+    double diff_gt_2t_ratio = 0.0;
+    double diff_mean = 0.0;
+    double diff_median = 0.0;
+    int32_t diff_max = 0;
+    int32_t diff_min = 0;
 };
 
 class AsyncRenderWorker : public QThread {
