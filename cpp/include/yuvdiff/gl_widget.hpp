@@ -78,6 +78,7 @@ private:
     );
 
     bool screen_to_pixel(const QPointF& screen_pos, int& out_x, int& out_y) const;
+    void evaluate_pixel_hover(const QPointF& screen_pos);
     void render_pixel_grid_and_values(
         QPainter& painter,
         int video_w,
@@ -102,6 +103,10 @@ private:
     QPointF pan_offset_{0.0f, 0.0f};
     bool is_dragging_ = false;
     QPoint last_mouse_pos_;
+
+    // Hover Cursor Tracking State (Per-frame dynamic pixel inspector)
+    bool has_hover_ = false;
+    QPointF last_hover_pos_{-1.0f, -1.0f};
 
     // Comparison Wipe Line State
     float wipe_pos_ = 0.5f; // [0.0, 1.0] normalized video X split position

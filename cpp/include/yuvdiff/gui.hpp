@@ -37,6 +37,7 @@ private slots:
     void on_format_a_changed(const QString& fmt);
     void on_format_b_changed(const QString& fmt);
     void on_slider_changed(int idx);
+    void on_spin_frame_changed(int idx);
     void on_mode_changed(int index);
     void on_threshold_changed(int val);
     void on_play_toggled(bool checked);
@@ -52,6 +53,7 @@ private slots:
     // Pixel inspector slots
     void on_pixel_hovered(const yuvdiff::PixelInfo& info);
     void on_pixel_leave();
+    void on_reset_zoom_clicked();
 
 private:
     void build_ui();
@@ -60,6 +62,7 @@ private:
     void reload_parser(const QString& which);
     void maybe_load_frame();
     void request_current_frame();
+    void refresh_source_info();
 
     // State
     std::shared_ptr<YUVParser> parser_a_;
@@ -69,28 +72,65 @@ private:
 
     QTimer* play_timer_ = nullptr;
 
-    // UI Widgets
+    // Top Toolbar (Row 1)
     QPushButton* btn_open_a_ = nullptr;
     QPushButton* btn_open_b_ = nullptr;
-    QComboBox* combo_format_a_ = nullptr;
-    QComboBox* combo_format_b_ = nullptr;
-    QSpinBox* spin_w_ = nullptr;
-    QSpinBox* spin_h_ = nullptr;
-    QLabel* lbl_align_ = nullptr;
-    QComboBox* combo_align_ = nullptr;
-
-    QSpinBox* spin_threshold_ = nullptr;
-    QComboBox* combo_mode_ = nullptr;
     QPushButton* btn_export_current_ = nullptr;
     QPushButton* btn_export_all_ = nullptr;
-    QPushButton* btn_play_ = nullptr;
+
+    // Top Config Bar (Row 2)
+    QComboBox* combo_mode_ = nullptr;
+    QSpinBox* spin_threshold_ = nullptr;
+    QSpinBox* spin_w_ = nullptr;
+    QSpinBox* spin_h_ = nullptr;
+    QComboBox* combo_format_a_ = nullptr;
+    QComboBox* combo_format_b_ = nullptr;
+    QLabel* lbl_align_ = nullptr;
+    QComboBox* combo_align_ = nullptr;
     QSpinBox* spin_fps_ = nullptr;
 
-    QSlider* slider_ = nullptr;
-    QSpinBox* spin_frame_ = nullptr;
+    // Left Sidebar Cards
+    QLabel* lbl_info_a_file_ = nullptr;
+    QLabel* lbl_info_a_dim_ = nullptr;
+    QLabel* lbl_info_a_frames_ = nullptr;
 
+    QLabel* lbl_info_b_file_ = nullptr;
+    QLabel* lbl_info_b_dim_ = nullptr;
+    QLabel* lbl_info_b_frames_ = nullptr;
+
+    QLabel* lbl_psnr_total_ = nullptr;
+    QLabel* lbl_psnr_channels_ = nullptr;
+    QLabel* lbl_ssim_ = nullptr;
+
+    QLabel* lbl_diff_basic_ = nullptr;
+    QLabel* lbl_diff_gt_2t_ = nullptr;
+    QLabel* lbl_diff_gt_t_ = nullptr;
+    QLabel* lbl_diff_gt_half_t_ = nullptr;
+
+    QLabel* lbl_diff_mean_ = nullptr;
+    QLabel* lbl_diff_median_ = nullptr;
+    QLabel* lbl_diff_max_ = nullptr;
+    QLabel* lbl_diff_min_ = nullptr;
+
+    QLabel* lbl_insp_pos_ = nullptr;
+    QLabel* lbl_insp_val_a_ = nullptr;
+    QLabel* lbl_insp_val_b_ = nullptr;
+    QLabel* lbl_insp_diff_ = nullptr;
+
+    // Center Viewport
     YUVGLWidget* canvas_ = nullptr;
-    QLabel* lbl_pixel_info_ = nullptr;
+
+    // Bottom Transport & Timeline Deck
+    QPushButton* btn_step_prev_ = nullptr;
+    QPushButton* btn_play_ = nullptr;
+    QPushButton* btn_step_next_ = nullptr;
+    QSpinBox* spin_frame_ = nullptr;
+    QLabel* lbl_total_frames_ = nullptr;
+    QSlider* slider_ = nullptr;
+    QLabel* lbl_progress_pct_ = nullptr;
+    QPushButton* btn_reset_zoom_ = nullptr;
+
+    // Status bar
     QLabel* lbl_metrics_ = nullptr;
 };
 

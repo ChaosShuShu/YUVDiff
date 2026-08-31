@@ -150,32 +150,16 @@ void AsyncRenderWorker::process_request(const Request& req) {
             auto fa = std::make_shared<YUVFrame>(pa->read_frame(static_cast<size_t>(req.frame_idx)));
             auto fb = std::make_shared<YUVFrame>(pb->read_frame(static_cast<size_t>(req.frame_idx)));
 
-            // 1. FAST VISUAL PATH: Emit immediately so GPU renders without waiting
-            if (!req.is_prefetch) {
-                FrameReadyData data;
-                data.frame_idx = req.frame_idx;
-                data.is_dual = true;
-                data.frame_a = fa;
-                data.frame_b = fb;
-                data.mode = req.mode;
-                data.threshold = req.threshold;
-                emit frameReady(data);
-            }
-
-            // 2. METRICS PATH: Fast PSNR always, full SSIM and Diff when not high-speed playing
+            diff_engine_.set_threshold(req.threshold);
             PSNRResult psnr = metrics_calc_.psnr(*fa, *fb);
+            DiffResult diff = diff_engine_.diff(*fa, *fb);
             SSIMResult ssim;
-            DiffResult diff;
-            int64_t diff_pixels = 0;
-            int64_t total_pixels = static_cast<int64_t>(fa->width) * fa->height;
-
             if (!is_playing_) {
-                diff_engine_.set_threshold(req.threshold);
-                diff = diff_engine_.diff(*fa, *fb);
-                diff_pixels = diff.diff_pixel_count;
-                total_pixels = diff.total_pixel_count;
                 ssim = metrics_calc_.ssim(*fa, *fb);
             }
+
+            int64_t diff_pixels = diff.diff_pixel_count;
+            int64_t total_pixels = diff.total_pixel_count;
 
             CachedFrame item;
             item.frame_idx = req.frame_idx;

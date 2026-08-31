@@ -66,9 +66,11 @@ if (BUILD_GUI)
             cpp/include/yuvdiff/gl_widget.hpp
             cpp/include/yuvdiff/worker.hpp
             cpp/include/yuvdiff/cache.hpp
+            cpp/include/yuvdiff/theme.hpp
             cpp/src/gui.cpp
             cpp/src/gl_widget.cpp
             cpp/src/worker.cpp
+            cpp/src/theme.cpp
             cpp/src/main_gui.cpp
         )
         target_link_libraries(yuvdiff-gui PRIVATE yuvdiff_core Qt6::Widgets Qt6::OpenGL Qt6::OpenGLWidgets)

@@ -153,6 +153,9 @@ void YUVGLWidget::set_frames(
         threshold_ = threshold;
         needs_texture_update_ = true;
     }
+    if (has_hover_) {
+        evaluate_pixel_hover(last_hover_pos_);
+    }
     update(); // Schedule OpenGL paint
 }
 
@@ -163,6 +166,9 @@ void YUVGLWidget::clear_frames() {
         frame_b_.reset();
         needs_texture_update_ = false;
     }
+    has_hover_ = false;
+    last_hover_pos_ = {-1.0f, -1.0f};
+    emit pixelLeave();
     reset_zoom_pan();
     update();
 }
@@ -170,6 +176,9 @@ void YUVGLWidget::clear_frames() {
 void YUVGLWidget::reset_zoom_pan() {
     zoom_level_ = 1.0f;
     pan_offset_ = QPointF(0.0f, 0.0f);
+    if (has_hover_) {
+        evaluate_pixel_hover(last_hover_pos_);
+    }
     update();
 }
 
@@ -192,6 +201,10 @@ void YUVGLWidget::wheelEvent(QWheelEvent* event) {
     float ratio = zoom_level_ / old_zoom;
     pan_offset_.setX(mx - (mx - pan_offset_.x()) * ratio);
     pan_offset_.setY(my - (my - pan_offset_.y()) * ratio);
+
+    last_hover_pos_ = event->position();
+    has_hover_ = true;
+    evaluate_pixel_hover(last_hover_pos_);
 
     update();
     event->accept();
@@ -347,9 +360,22 @@ void YUVGLWidget::mouseMoveEvent(QMouseEvent* event) {
         unsetCursor();
     }
 
-    // Inspect pixel under cursor
+    // Record hover position and evaluate pixel under cursor
+    last_hover_pos_ = event->position();
+    has_hover_ = true;
+    evaluate_pixel_hover(last_hover_pos_);
+}
+
+void YUVGLWidget::evaluate_pixel_hover(const QPointF& screen_pos) {
+    std::shared_ptr<YUVFrame> fa, fb;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        fa = frame_a_;
+        fb = frame_b_;
+    }
+
     int px = -1, py = -1;
-    if (screen_to_pixel(event->position(), px, py)) {
+    if (screen_to_pixel(screen_pos, px, py)) {
         PixelInfo info;
         info.x = px;
         info.y = py;
@@ -402,6 +428,8 @@ void YUVGLWidget::mouseDoubleClickEvent(QMouseEvent* event) {
 }
 
 void YUVGLWidget::leaveEvent(QEvent* event) {
+    has_hover_ = false;
+    last_hover_pos_ = {-1.0f, -1.0f};
     emit pixelLeave();
     QOpenGLWidget::leaveEvent(event);
 }
