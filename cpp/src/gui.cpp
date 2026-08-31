@@ -13,6 +13,7 @@
 #include <QMessageBox>
 #include <QPixmap>
 #include <QScrollArea>
+#include <QSplitter>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -27,12 +28,14 @@ static QHBoxLayout* make_kv_row(QWidget* parent, const QString& key, QLabel*& ou
     row->setSpacing(6);
     QLabel* k = new QLabel(key, parent);
     k->setObjectName("SidebarKey");
+    k->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
     out_val_label = new QLabel("—", parent);
     out_val_label->setObjectName("SidebarVal");
+    out_val_label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    out_val_label->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     out_val_label->setTextInteractionFlags(Qt::TextSelectableByMouse);
     row->addWidget(k);
-    row->addStretch();
-    row->addWidget(out_val_label);
+    row->addWidget(out_val_label, 1);
     return row;
 }
 
@@ -190,18 +193,18 @@ void MainWindow::build_ui() {
     root->addWidget(frame_tb2);
 
     // ==========================================
-    // MIDDLE: Left Sidebar + Central Viewport
+    // MIDDLE: Left Sidebar + Central Viewport (Splitter)
     // ==========================================
-    QHBoxLayout* body = new QHBoxLayout();
-    body->setContentsMargins(0, 0, 0, 0);
-    body->setSpacing(0);
+    QSplitter* splitter = new QSplitter(Qt::Horizontal, central);
+    splitter->setObjectName("MainSplitter");
+    splitter->setChildrenCollapsible(false);
 
     // Left Info & Stats Sidebar
-    QScrollArea* scroll = new QScrollArea(this);
+    QScrollArea* scroll = new QScrollArea(splitter);
     scroll->setObjectName("SidebarScrollArea");
-    scroll->setFixedWidth(300);
+    scroll->setMinimumWidth(280);
     scroll->setWidgetResizable(true);
-    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 
     QWidget* sidebar_content = new QWidget(scroll);
     sidebar_content->setObjectName("SidebarContent");
@@ -261,15 +264,19 @@ void MainWindow::build_ui() {
 
     sb_layout->addStretch();
     scroll->setWidget(sidebar_content);
-    body->addWidget(scroll);
 
     // Center Canvas (OpenGL GPU Accelerated)
-    canvas_ = new YUVGLWidget(this);
+    canvas_ = new YUVGLWidget(splitter);
     connect(canvas_, &YUVGLWidget::pixelHovered, this, &MainWindow::on_pixel_hovered);
     connect(canvas_, &YUVGLWidget::pixelLeave, this, &MainWindow::on_pixel_leave);
-    body->addWidget(canvas_, 1);
 
-    root->addLayout(body, 1);
+    splitter->addWidget(scroll);
+    splitter->addWidget(canvas_);
+    splitter->setStretchFactor(0, 0);
+    splitter->setStretchFactor(1, 1);
+    splitter->setSizes({340, 1020});
+
+    root->addWidget(splitter, 1);
 
     // ==========================================
     // BOTTOM: Transport & Timeline Deck

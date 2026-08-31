@@ -246,11 +246,11 @@ void apply_studio_dark_theme(QApplication& app) {
         /* Key / Value Label Styling */
         QLabel#SidebarKey {
             color: #94a3b8;
-            font-size: 11px;
+            font-size: 9pt;
         }
         QLabel#SidebarVal {
             color: #f1f5f9;
-            font-size: 11px;
+            font-size: 9pt;
             font-family: monospace;
             font-weight: 500;
         }
@@ -261,14 +261,23 @@ void apply_studio_dark_theme(QApplication& app) {
             border-radius: 4px;
             padding: 3px 8px;
             font-family: monospace;
-            font-size: 12px;
+            font-size: 9pt;
             font-weight: bold;
         }
         QLabel#ProgressPctLabel {
             color: #94a3b8;
             font-family: monospace;
-            font-size: 11px;
+            font-size: 9pt;
             min-width: 45px;
+        }
+
+        /* Splitter */
+        QSplitter::handle:horizontal {
+            background-color: #1e222f;
+            width: 3px;
+        }
+        QSplitter::handle:horizontal:hover {
+            background-color: #38bdf8;
         }
 
         /* Tooltip */
@@ -278,7 +287,7 @@ void apply_studio_dark_theme(QApplication& app) {
             border: 1px solid #38bdf8;
             border-radius: 4px;
             padding: 4px 8px;
-            font-size: 11px;
+            font-size: 9pt;
         }
 
         /* Status Bar */
@@ -286,7 +295,7 @@ void apply_studio_dark_theme(QApplication& app) {
             background-color: #0f1117;
             color: #94a3b8;
             border-top: 1px solid #1f2330;
-            font-size: 11px;
+            font-size: 9pt;
             min-height: 22px;
         }
     )";
