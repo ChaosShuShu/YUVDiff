@@ -31,11 +31,12 @@ static QHBoxLayout* make_kv_row(QWidget* parent, const QString& key, QLabel*& ou
     k->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
     out_val_label = new QLabel("—", parent);
     out_val_label->setObjectName("SidebarVal");
-    out_val_label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    out_val_label->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     out_val_label->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     out_val_label->setTextInteractionFlags(Qt::TextSelectableByMouse);
     row->addWidget(k);
-    row->addWidget(out_val_label, 1);
+    row->addWidget(out_val_label);
+    row->addStretch();
     return row;
 }
 
@@ -85,24 +86,24 @@ void MainWindow::build_ui() {
     QFrame* frame_tb1 = new QFrame(this);
     frame_tb1->setObjectName("ToolBarFrame");
     QHBoxLayout* tb1 = new QHBoxLayout(frame_tb1);
-    tb1->setContentsMargins(12, 6, 12, 6);
-    tb1->setSpacing(8);
+    tb1->setContentsMargins(8, 3, 8, 3);
+    tb1->setSpacing(6);
 
-    btn_open_a_ = new QPushButton("📂 Open A…", this);
+    btn_open_a_ = new QPushButton("Open A", this);
     btn_open_a_->setObjectName("BtnOpenA");
     btn_open_a_->setToolTip("Open Primary Video A (YUV)");
     connect(btn_open_a_, &QPushButton::clicked, this, &MainWindow::on_open_a);
 
-    btn_open_b_ = new QPushButton("📂 Open B…", this);
+    btn_open_b_ = new QPushButton("Open B", this);
     btn_open_b_->setObjectName("BtnOpenB");
     btn_open_b_->setToolTip("Open Comparison Video B (YUV)");
     connect(btn_open_b_, &QPushButton::clicked, this, &MainWindow::on_open_b);
 
-    btn_export_current_ = new QPushButton("💾 Export PNG", this);
+    btn_export_current_ = new QPushButton("Export Frame", this);
     btn_export_current_->setToolTip("Export current viewport frame to PNG");
     connect(btn_export_current_, &QPushButton::clicked, this, &MainWindow::on_export_current);
 
-    btn_export_all_ = new QPushButton("📦 Export All…", this);
+    btn_export_all_ = new QPushButton("Export Sequence", this);
     btn_export_all_->setToolTip("Batch export all rendered sequence frames to directory");
     connect(btn_export_all_, &QPushButton::clicked, this, &MainWindow::on_export_all);
 
@@ -120,8 +121,8 @@ void MainWindow::build_ui() {
     QFrame* frame_tb2 = new QFrame(this);
     frame_tb2->setObjectName("ConfigBarFrame");
     QHBoxLayout* tb2 = new QHBoxLayout(frame_tb2);
-    tb2->setContentsMargins(12, 5, 12, 5);
-    tb2->setSpacing(8);
+    tb2->setContentsMargins(8, 3, 8, 3);
+    tb2->setSpacing(6);
 
     combo_mode_ = new QComboBox(this);
     combo_mode_->addItem("ORIGINAL_A (1)", static_cast<int>(RenderMode::ORIGINAL_A));
@@ -199,18 +200,18 @@ void MainWindow::build_ui() {
     splitter->setObjectName("MainSplitter");
     splitter->setChildrenCollapsible(false);
 
-    // Left Info & Stats Sidebar
+    // Left Info & Stats Sidebar (Compact, Multi-line, Narrow)
     QScrollArea* scroll = new QScrollArea(splitter);
     scroll->setObjectName("SidebarScrollArea");
-    scroll->setMinimumWidth(280);
+    scroll->setMinimumWidth(180);
     scroll->setWidgetResizable(true);
     scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 
     QWidget* sidebar_content = new QWidget(scroll);
     sidebar_content->setObjectName("SidebarContent");
     QVBoxLayout* sb_layout = new QVBoxLayout(sidebar_content);
-    sb_layout->setContentsMargins(8, 4, 8, 8);
-    sb_layout->setSpacing(6);
+    sb_layout->setContentsMargins(6, 4, 6, 6);
+    sb_layout->setSpacing(5);
 
     // ==========================================
     // SECTION 1: Static Metadata (静态信息)
@@ -274,7 +275,7 @@ void MainWindow::build_ui() {
     splitter->addWidget(canvas_);
     splitter->setStretchFactor(0, 0);
     splitter->setStretchFactor(1, 1);
-    splitter->setSizes({340, 1020});
+    splitter->setSizes({210, 1150});
 
     root->addWidget(splitter, 1);
 
@@ -284,23 +285,23 @@ void MainWindow::build_ui() {
     QFrame* frame_bottom = new QFrame(this);
     frame_bottom->setObjectName("BottomDeckFrame");
     QHBoxLayout* deck = new QHBoxLayout(frame_bottom);
-    deck->setContentsMargins(12, 6, 12, 6);
-    deck->setSpacing(8);
+    deck->setContentsMargins(8, 4, 8, 4);
+    deck->setSpacing(6);
 
-    btn_step_prev_ = new QPushButton("⏮", this);
-    btn_step_prev_->setFixedWidth(36);
+    btn_step_prev_ = new QPushButton("<", this);
+    btn_step_prev_->setFixedWidth(30);
     btn_step_prev_->setToolTip("Previous Frame (Left Arrow / [)");
     connect(btn_step_prev_, &QPushButton::clicked, this, [this]() { step_frame(-1); });
 
-    btn_play_ = new QPushButton("▶ Play", this);
+    btn_play_ = new QPushButton("Play", this);
     btn_play_->setObjectName("BtnPlay");
-    btn_play_->setFixedWidth(84);
+    btn_play_->setFixedWidth(64);
     btn_play_->setCheckable(true);
     btn_play_->setToolTip("Play / Pause (Space)");
     connect(btn_play_, &QPushButton::toggled, this, &MainWindow::on_play_toggled);
 
-    btn_step_next_ = new QPushButton("⏭", this);
-    btn_step_next_->setFixedWidth(36);
+    btn_step_next_ = new QPushButton(">", this);
+    btn_step_next_->setFixedWidth(30);
     btn_step_next_->setToolTip("Next Frame (Right Arrow / ])");
     connect(btn_step_next_, &QPushButton::clicked, this, [this]() { step_frame(1); });
 
@@ -308,14 +309,14 @@ void MainWindow::build_ui() {
     spin_frame_->setObjectName("SpinFrame");
     spin_frame_->setRange(0, 0);
     spin_frame_->setValue(0);
-    spin_frame_->setFixedWidth(75);
+    spin_frame_->setFixedWidth(65);
     spin_frame_->setAlignment(Qt::AlignCenter);
     spin_frame_->setToolTip("Current Frame (Editable: type number to jump)");
     connect(spin_frame_, QOverload<int>::of(&QSpinBox::valueChanged), this, &MainWindow::on_spin_frame_changed);
 
     lbl_total_frames_ = new QLabel("/ 0", this);
     lbl_total_frames_->setObjectName("SidebarKey");
-    lbl_total_frames_->setStyleSheet("font-family: monospace; font-size: 11px; padding-left: 2px; padding-right: 4px;");
+    lbl_total_frames_->setStyleSheet("font-family: monospace; font-size: 8.5pt; padding-left: 2px; padding-right: 4px;");
 
     slider_ = new QSlider(Qt::Horizontal, this);
     slider_->setRange(0, 0);
@@ -323,11 +324,11 @@ void MainWindow::build_ui() {
 
     lbl_progress_pct_ = new QLabel("0.0%", this);
     lbl_progress_pct_->setObjectName("ProgressPctLabel");
-    lbl_progress_pct_->setFixedWidth(50);
+    lbl_progress_pct_->setFixedWidth(46);
     lbl_progress_pct_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
 
-    btn_reset_zoom_ = new QPushButton("🔍 1:1", this);
-    btn_reset_zoom_->setFixedWidth(56);
+    btn_reset_zoom_ = new QPushButton("1:1", this);
+    btn_reset_zoom_->setFixedWidth(42);
     btn_reset_zoom_->setToolTip("Reset Zoom & Pan to 1.0x (R / Double-click)");
     connect(btn_reset_zoom_, &QPushButton::clicked, this, &MainWindow::on_reset_zoom_clicked);
 
@@ -498,7 +499,7 @@ void MainWindow::refresh_source_info() {
             .arg(parser_b_->width()).arg(parser_b_->height())
             .arg(combo_format_b_->currentText()));
         QString align_str = (parser_b_->bit_depth() == BitDepth::BIT10LE)
-            ? QString(" | %1").arg(QString::fromStdString(to_string(parser_b_->bit_alignment())))
+            ? QString(" (%1)").arg(QString::fromStdString(to_string(parser_b_->bit_alignment())))
             : "";
         lbl_info_b_frames_->setText(QString("%1 frames%2").arg(parser_b_->num_frames()).arg(align_str));
     } else {
@@ -636,10 +637,10 @@ void MainWindow::on_play_toggled(bool checked) {
     if (checked) {
         int fps = spin_fps_->value();
         play_timer_->start(1000 / fps);
-        btn_play_->setText("⏸ Pause");
+        btn_play_->setText("Pause");
     } else {
         play_timer_->stop();
-        btn_play_->setText("▶ Play");
+        btn_play_->setText("Play");
     }
 }
 

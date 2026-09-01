@@ -42,7 +42,7 @@ void apply_studio_dark_theme(QApplication& app) {
         QFrame#ToolBarFrame, QFrame#ConfigBarFrame, QFrame#BottomDeckFrame {
             background-color: #161922;
             border-bottom: 1px solid #242938;
-            padding: 4px;
+            padding: 2px 6px;
         }
         QFrame#BottomDeckFrame {
             border-top: 1px solid #242938;
@@ -65,21 +65,21 @@ void apply_studio_dark_theme(QApplication& app) {
         QGroupBox {
             background-color: #171a24;
             border: 1px solid #282d3e;
-            border-radius: 6px;
-            margin-top: 10px;
-            padding-top: 10px;
-            padding-bottom: 6px;
-            padding-left: 8px;
-            padding-right: 8px;
-            font-size: 11px;
+            border-radius: 5px;
+            margin-top: 6px;
+            padding-top: 6px;
+            padding-bottom: 4px;
+            padding-left: 6px;
+            padding-right: 6px;
+            font-size: 8.5pt;
             font-weight: bold;
             color: #38bdf8;
         }
         QGroupBox::title {
             subcontrol-origin: margin;
             subcontrol-position: top left;
-            left: 8px;
-            padding: 0 4px;
+            left: 6px;
+            padding: 0 3px;
             background-color: #14161f;
             color: #38bdf8;
         }
@@ -90,9 +90,10 @@ void apply_studio_dark_theme(QApplication& app) {
             color: #e2e8f0;
             border: 1px solid #31374b;
             border-radius: 4px;
-            padding: 5px 12px;
+            padding: 2px 8px;
+            font-size: 8.5pt;
             font-weight: 500;
-            min-height: 18px;
+            min-height: 16px;
         }
         QPushButton:hover {
             background-color: #2a3042;
@@ -130,7 +131,7 @@ void apply_studio_dark_theme(QApplication& app) {
             border: 1px solid #38bdf8;
             color: #ffffff;
             font-weight: bold;
-            padding: 5px 16px;
+            padding: 2px 10px;
         }
         QPushButton#BtnPlay:hover {
             background-color: #0ea5e9;
@@ -147,8 +148,9 @@ void apply_studio_dark_theme(QApplication& app) {
             color: #e2e8f0;
             border: 1px solid #2e3447;
             border-radius: 4px;
-            padding: 4px 8px;
-            min-height: 18px;
+            padding: 2px 6px;
+            font-size: 8.5pt;
+            min-height: 16px;
         }
         QComboBox:hover {
             border-color: #38bdf8;
@@ -159,7 +161,7 @@ void apply_studio_dark_theme(QApplication& app) {
         QComboBox::drop-down {
             subcontrol-origin: padding;
             subcontrol-position: top right;
-            width: 18px;
+            width: 16px;
             border-left: 1px solid #2e3447;
             border-top-right-radius: 4px;
             border-bottom-right-radius: 4px;
@@ -171,7 +173,7 @@ void apply_studio_dark_theme(QApplication& app) {
             selection-background-color: #0284c7;
             selection-color: #ffffff;
             outline: none;
-            padding: 4px;
+            padding: 2px;
         }
 
         /* SpinBox */
@@ -180,8 +182,9 @@ void apply_studio_dark_theme(QApplication& app) {
             color: #e2e8f0;
             border: 1px solid #2e3447;
             border-radius: 4px;
-            padding: 3px 6px;
-            min-height: 18px;
+            padding: 2px 4px;
+            font-size: 8.5pt;
+            min-height: 16px;
         }
         QSpinBox:hover {
             border-color: #38bdf8;
