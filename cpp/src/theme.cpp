@@ -6,6 +6,7 @@
 #include <QFont>
 #include <QFontDatabase>
 #include <QStyleHints>
+#include <QtGlobal>
 
 namespace yuvdiff {
 
@@ -1148,6 +1149,7 @@ void apply_theme(QApplication& app, ThemeMode mode) {
         is_dark = false;
     } else {
         // ThemeMode::Auto: detect from system styleHints (Qt 6.5+)
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
         auto scheme = QGuiApplication::styleHints()->colorScheme();
         if (scheme == Qt::ColorScheme::Light) {
             is_dark = false;
@@ -1158,6 +1160,11 @@ void apply_theme(QApplication& app, ThemeMode mode) {
             QColor win_col = app.palette().color(QPalette::Window);
             is_dark = (win_col.value() < 128);
         }
+#else
+        // For Qt < 6.5: detect from system palette brightness
+        QColor win_col = app.palette().color(QPalette::Window);
+        is_dark = (win_col.value() < 128);
+#endif
     }
 
     s_is_dark = is_dark;
@@ -1173,12 +1180,17 @@ bool is_dark_theme() {
 }
 
 void setup_system_theme_listener(QApplication& app) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
     auto* hints = QGuiApplication::styleHints();
     QObject::connect(hints, &QStyleHints::colorSchemeChanged, &app, [&app](Qt::ColorScheme /*scheme*/) {
         if (s_current_mode == ThemeMode::Auto) {
             apply_theme(app, ThemeMode::Auto);
         }
     });
+#else
+    // QStyleHints::colorSchemeChanged was introduced in Qt 6.5
+    (void)app;
+#endif
 }
 
 void apply_studio_dark_theme(QApplication& app) {
