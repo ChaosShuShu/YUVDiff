@@ -72,6 +72,7 @@ if (BUILD_GUI)
             cpp/src/worker.cpp
             cpp/src/theme.cpp
             cpp/src/main_gui.cpp
+            resources/resources.qrc
         )
         target_link_libraries(yuvdiff-gui PRIVATE yuvdiff_core Qt6::Widgets Qt6::OpenGL Qt6::OpenGLWidgets)
         message(STATUS "Qt6 OpenGLWidgets found: yuvdiff-gui with GPU acceleration will be built.")

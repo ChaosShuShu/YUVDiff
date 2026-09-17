@@ -846,6 +846,8 @@ void YUVGLWidget::paintEvent(QPaintEvent* event) {
 }
 
 void YUVGLWidget::paintGL() {
+    QColor base_col = palette().color(QPalette::Base);
+    glClearColor(base_col.redF(), base_col.greenF(), base_col.blueF(), 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
     std::shared_ptr<YUVFrame> fa;

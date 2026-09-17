@@ -1,0 +1,19 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+    <qresource prefix="/icons">
+        <file alias="arrow_up_dark.png">icons/arrow_up_dark.png</file>
+        <file alias="arrow_down_dark.png">icons/arrow_down_dark.png</file>
+        <file alias="arrow_up_light.png">icons/arrow_up_light.png</file>
+        <file alias="arrow_down_light.png">icons/arrow_down_light.png</file>
+        <file alias="chevron_down_dark.png">icons/chevron_down_dark.png</file>
+        <file alias="chevron_down_light.png">icons/chevron_down_light.png</file>
+        <file alias="media_prev_dark.png">icons/media_prev_dark.png</file>
+        <file alias="media_prev_light.png">icons/media_prev_light.png</file>
+        <file alias="media_play_dark.png">icons/media_play_dark.png</file>
+        <file alias="media_play_light.png">icons/media_play_light.png</file>
+        <file alias="media_pause_dark.png">icons/media_pause_dark.png</file>
+        <file alias="media_pause_light.png">icons/media_pause_light.png</file>
+        <file alias="media_next_dark.png">icons/media_next_dark.png</file>
+        <file alias="media_next_light.png">icons/media_next_light.png</file>
+    </qresource>
+</RCC>

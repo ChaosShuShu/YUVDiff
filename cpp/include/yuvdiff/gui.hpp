@@ -17,12 +17,29 @@
 #include <QSpinBox>
 #include <QComboBox>
 #include <QPushButton>
+#include <QToolButton>
 #include <QStatusBar>
+#include <QAction>
+#include <QActionGroup>
+#include <QMenuBar>
 
+#include <map>
 #include <memory>
 #include <optional>
 
 namespace yuvdiff {
+
+class TimelineSlider : public QSlider {
+    Q_OBJECT
+public:
+    explicit TimelineSlider(QWidget* parent = nullptr)
+        : QSlider(Qt::Horizontal, parent) {}
+    explicit TimelineSlider(Qt::Orientation orientation, QWidget* parent = nullptr)
+        : QSlider(orientation, parent) {}
+
+protected:
+    void paintEvent(QPaintEvent* ev) override;
+};
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -31,6 +48,8 @@ public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
 
+    void populate_mock_data();
+
 private slots:
     void on_open_a();
     void on_open_b();
@@ -38,7 +57,7 @@ private slots:
     void on_format_b_changed(const QString& fmt);
     void on_slider_changed(int idx);
     void on_spin_frame_changed(int idx);
-    void on_mode_changed(int index);
+    void set_render_mode(RenderMode mode);
     void on_threshold_changed(int val);
     void on_play_toggled(bool checked);
     void on_play_tick();
@@ -55,8 +74,14 @@ private slots:
     void on_pixel_leave();
     void on_reset_zoom_clicked();
 
+    void update_transport_icons();
+
+protected:
+    void changeEvent(QEvent* event) override;
+
 private:
     void build_ui();
+    void build_menu_bar();
     void build_shortcuts();
     void open_file(const QString& which);
     void reload_parser(const QString& which);
@@ -69,17 +94,18 @@ private:
     std::shared_ptr<YUVParser> parser_b_;
     std::shared_ptr<Renderer> renderer_;
     std::unique_ptr<AsyncRenderWorker> worker_;
-
     QTimer* play_timer_ = nullptr;
 
-    // Top Toolbar (Row 1)
-    QPushButton* btn_open_a_ = nullptr;
-    QPushButton* btn_open_b_ = nullptr;
-    QPushButton* btn_export_current_ = nullptr;
-    QPushButton* btn_export_all_ = nullptr;
+    // UI Widgets
+    QAction* act_open_a_ = nullptr;
+    QAction* act_open_b_ = nullptr;
+    QAction* act_export_current_ = nullptr;
+    QAction* act_export_all_ = nullptr;
 
-    // Top Config Bar (Row 2)
-    QComboBox* combo_mode_ = nullptr;
+    RenderMode current_mode_ = RenderMode::SIDE_BY_SIDE;
+    QActionGroup* mode_group_ = nullptr;
+    std::map<RenderMode, QAction*> mode_actions_;
+
     QSpinBox* spin_threshold_ = nullptr;
     QSpinBox* spin_w_ = nullptr;
     QSpinBox* spin_h_ = nullptr;
@@ -89,11 +115,10 @@ private:
     QComboBox* combo_align_ = nullptr;
     QSpinBox* spin_fps_ = nullptr;
 
-    // Left Sidebar Cards
+    // Sidebar Information Display
     QLabel* lbl_info_a_file_ = nullptr;
     QLabel* lbl_info_a_dim_ = nullptr;
     QLabel* lbl_info_a_frames_ = nullptr;
-
     QLabel* lbl_info_b_file_ = nullptr;
     QLabel* lbl_info_b_dim_ = nullptr;
     QLabel* lbl_info_b_frames_ = nullptr;
@@ -101,14 +126,11 @@ private:
     QLabel* lbl_psnr_total_ = nullptr;
     QLabel* lbl_psnr_channels_ = nullptr;
     QLabel* lbl_ssim_ = nullptr;
-
     QLabel* lbl_diff_basic_ = nullptr;
     QLabel* lbl_diff_gt_2t_ = nullptr;
     QLabel* lbl_diff_gt_t_ = nullptr;
     QLabel* lbl_diff_gt_half_t_ = nullptr;
-
     QLabel* lbl_diff_mean_ = nullptr;
-    QLabel* lbl_diff_median_ = nullptr;
     QLabel* lbl_diff_max_ = nullptr;
     QLabel* lbl_diff_min_ = nullptr;
 
@@ -120,15 +142,15 @@ private:
     // Center Viewport
     YUVGLWidget* canvas_ = nullptr;
 
-    // Bottom Transport & Timeline Deck
-    QPushButton* btn_step_prev_ = nullptr;
-    QPushButton* btn_play_ = nullptr;
-    QPushButton* btn_step_next_ = nullptr;
+    // Bottom Transport & Timeline Deck (visionOS Floating Platter)
+    QToolButton* btn_step_prev_ = nullptr;
+    QToolButton* btn_play_ = nullptr;
+    QToolButton* btn_step_next_ = nullptr;
     QSpinBox* spin_frame_ = nullptr;
     QLabel* lbl_total_frames_ = nullptr;
-    QSlider* slider_ = nullptr;
+    TimelineSlider* slider_ = nullptr;
     QLabel* lbl_progress_pct_ = nullptr;
-    QPushButton* btn_reset_zoom_ = nullptr;
+    QToolButton* btn_reset_zoom_ = nullptr;
 
     // Status bar
     QLabel* lbl_metrics_ = nullptr;
