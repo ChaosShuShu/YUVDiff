@@ -53,6 +53,9 @@ public:
 private slots:
     void on_open_a();
     void on_open_b();
+    void on_close_a();
+    void on_close_b();
+    void on_close_all();
     void on_format_a_changed(const QString& fmt);
     void on_format_b_changed(const QString& fmt);
     void on_slider_changed(int idx);
@@ -88,6 +91,7 @@ private:
     void maybe_load_frame();
     void request_current_frame();
     void refresh_source_info();
+    void reset_metrics_display();
 
     // State
     std::shared_ptr<YUVParser> parser_a_;
@@ -99,6 +103,9 @@ private:
     // UI Widgets
     QAction* act_open_a_ = nullptr;
     QAction* act_open_b_ = nullptr;
+    QAction* act_close_a_ = nullptr;
+    QAction* act_close_b_ = nullptr;
+    QAction* act_close_all_ = nullptr;
     QAction* act_export_current_ = nullptr;
     QAction* act_export_all_ = nullptr;
 

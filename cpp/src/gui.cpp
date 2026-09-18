@@ -130,6 +130,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     build_ui();
     build_menu_bar();
     build_shortcuts();
+    refresh_source_info();
 }
 
 MainWindow::~MainWindow() {
@@ -295,6 +296,7 @@ void MainWindow::build_ui() {
 
     // Center Canvas (OpenGL GPU Accelerated)
     canvas_ = new YUVGLWidget(splitter);
+    canvas_->setObjectName("ViewportCanvas");
     connect(canvas_, &YUVGLWidget::pixelHovered, this, &MainWindow::on_pixel_hovered);
     connect(canvas_, &YUVGLWidget::pixelLeave, this, &MainWindow::on_pixel_leave);
 
@@ -419,11 +421,27 @@ void MainWindow::build_menu_bar() {
 
     menu_file->addSeparator();
 
+    act_close_a_ = menu_file->addAction("关闭视频 A (&Close A)", QKeySequence(Qt::CTRL | Qt::Key_W), this, &MainWindow::on_close_a);
+    act_close_a_->setStatusTip("关闭并卸载基准视频 A");
+    act_close_a_->setEnabled(false);
+
+    act_close_b_ = menu_file->addAction("关闭视频 B (&Close B)", QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_W), this, &MainWindow::on_close_b);
+    act_close_b_->setStatusTip("关闭并卸载对比视频 B");
+    act_close_b_->setEnabled(false);
+
+    act_close_all_ = menu_file->addAction("关闭全部视频 (&Close All)", this, &MainWindow::on_close_all);
+    act_close_all_->setStatusTip("关闭所有当前加载的视频序列");
+    act_close_all_->setEnabled(false);
+
+    menu_file->addSeparator();
+
     act_export_current_ = menu_file->addAction("保存当前帧 (&Save Frame)...", QKeySequence::Save, this, &MainWindow::on_export_current);
     act_export_current_->setStatusTip("将当前视口渲染帧保存为图片 (PNG)");
+    act_export_current_->setEnabled(false);
 
     act_export_all_ = menu_file->addAction("保存/导出序列 (&Export Sequence)...", QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_S), this, &MainWindow::on_export_all);
     act_export_all_->setStatusTip("批量导出整个比对序列帧");
+    act_export_all_->setEnabled(false);
 
     menu_file->addSeparator();
 
@@ -506,6 +524,7 @@ void MainWindow::build_menu_bar() {
             "<b>首尾跳转:</b> Home / End<br>"
             "<b>缩放还原:</b> R 或双击视口<br>"
             "<b>打开文件:</b> Ctrl+O (A), Ctrl+Shift+O (B)<br>"
+            "<b>关闭文件:</b> Ctrl+W (A), Ctrl+Shift+W (B)<br>"
             "<b>保存导出:</b> Ctrl+S (单帧), Ctrl+Shift+S (序列)");
     });
 
@@ -543,6 +562,52 @@ void MainWindow::on_open_a() {
 
 void MainWindow::on_open_b() {
     open_file("b");
+}
+
+void MainWindow::on_close_a() {
+    if (!parser_a_ && lbl_info_a_file_->text() == "Not loaded") return;
+
+    if (play_timer_->isActive()) {
+        play_timer_->stop();
+        btn_play_->setChecked(false);
+    }
+
+    parser_a_.reset();
+    if (worker_) worker_->clear_cache();
+
+    refresh_source_info();
+    maybe_load_frame();
+}
+
+void MainWindow::on_close_b() {
+    if (!parser_b_ && lbl_info_b_file_->text() == "Not loaded") return;
+
+    if (play_timer_->isActive()) {
+        play_timer_->stop();
+        btn_play_->setChecked(false);
+    }
+
+    parser_b_.reset();
+    if (worker_) worker_->clear_cache();
+
+    refresh_source_info();
+    maybe_load_frame();
+}
+
+void MainWindow::on_close_all() {
+    if (!parser_a_ && !parser_b_ && lbl_info_a_file_->text() == "Not loaded" && lbl_info_b_file_->text() == "Not loaded") return;
+
+    if (play_timer_->isActive()) {
+        play_timer_->stop();
+        btn_play_->setChecked(false);
+    }
+
+    parser_a_.reset();
+    parser_b_.reset();
+    if (worker_) worker_->clear_cache();
+
+    refresh_source_info();
+    maybe_load_frame();
 }
 
 void MainWindow::open_file(const QString& which) {
@@ -616,6 +681,24 @@ void MainWindow::open_file(const QString& which) {
     maybe_load_frame();
 }
 
+void MainWindow::reset_metrics_display() {
+    if (lbl_psnr_total_) lbl_psnr_total_->setText("—");
+    if (lbl_psnr_channels_) lbl_psnr_channels_->setText("—");
+    if (lbl_ssim_) lbl_ssim_->setText("—");
+    if (lbl_diff_basic_) lbl_diff_basic_->setText("—");
+    if (lbl_diff_gt_2t_) lbl_diff_gt_2t_->setText("—");
+    if (lbl_diff_gt_t_) lbl_diff_gt_t_->setText("—");
+    if (lbl_diff_gt_half_t_) lbl_diff_gt_half_t_->setText("—");
+    if (lbl_diff_mean_) lbl_diff_mean_->setText("—");
+    if (lbl_diff_max_) lbl_diff_max_->setText("—");
+    if (lbl_diff_min_) lbl_diff_min_->setText("—");
+    if (lbl_insp_pos_) lbl_insp_pos_->setText("—");
+    if (lbl_insp_val_a_) lbl_insp_val_a_->setText("—");
+    if (lbl_insp_val_b_) lbl_insp_val_b_->setText("—");
+    if (lbl_insp_diff_) lbl_insp_diff_->setText("—");
+    if (lbl_metrics_) lbl_metrics_->setText("Ready");
+}
+
 void MainWindow::refresh_source_info() {
     if (parser_a_) {
         QString fname = QFileInfo(QString::fromStdString(parser_a_->path())).fileName();
@@ -648,6 +731,27 @@ void MainWindow::refresh_source_info() {
         lbl_info_b_file_->setToolTip("");
         lbl_info_b_dim_->setText("—");
         lbl_info_b_frames_->setText("—");
+    }
+
+    // Update action states based on loaded videos
+    if (act_close_a_) act_close_a_->setEnabled(parser_a_ != nullptr);
+    if (act_close_b_) act_close_b_->setEnabled(parser_b_ != nullptr);
+    if (act_close_all_) act_close_all_->setEnabled(parser_a_ != nullptr || parser_b_ != nullptr);
+    if (act_export_current_) act_export_current_->setEnabled(parser_a_ != nullptr || parser_b_ != nullptr);
+    if (act_export_all_) act_export_all_->setEnabled(parser_a_ != nullptr || parser_b_ != nullptr);
+
+    bool both = (parser_a_ != nullptr && parser_b_ != nullptr);
+    bool any_a = (parser_a_ != nullptr);
+    bool any_b = (parser_b_ != nullptr);
+    for (auto& [mode, act] : mode_actions_) {
+        if (!act) continue;
+        if (mode == RenderMode::ORIGINAL_A) {
+            act->setEnabled(any_a);
+        } else if (mode == RenderMode::ORIGINAL_B) {
+            act->setEnabled(any_b);
+        } else {
+            act->setEnabled(both);
+        }
     }
 }
 
@@ -695,11 +799,25 @@ void MainWindow::on_format_b_changed(const QString& fmt) {
 
 void MainWindow::maybe_load_frame() {
     if (!parser_a_ && !parser_b_) {
-        if (canvas_) canvas_->set_frames(nullptr, nullptr, RenderMode::ORIGINAL_A, 4);
-        if (worker_) worker_->set_parsers(nullptr, nullptr, nullptr);
-        if (spin_frame_) spin_frame_->setRange(0, 0);
+        renderer_.reset();
+        if (canvas_) canvas_->clear_frames();
+        if (worker_) {
+            worker_->clear_cache();
+            worker_->set_parsers(nullptr, nullptr, nullptr);
+        }
+        if (slider_) {
+            QSignalBlocker b_sl(slider_);
+            slider_->setRange(0, 0);
+            slider_->setValue(0);
+        }
+        if (spin_frame_) {
+            QSignalBlocker b_sp(spin_frame_);
+            spin_frame_->setRange(0, 0);
+            spin_frame_->setValue(0);
+        }
         if (lbl_total_frames_) lbl_total_frames_->setText("/ 0");
         if (lbl_progress_pct_) lbl_progress_pct_->setText("0.0%");
+        reset_metrics_display();
         return;
     }
 
@@ -717,6 +835,9 @@ void MainWindow::maybe_load_frame() {
 
         n = static_cast<int>(std::min(parser_a_->num_frames(), parser_b_->num_frames()));
         renderer_ = std::make_shared<Renderer>(parser_a_->width(), parser_a_->height());
+        if (current_mode_ == RenderMode::ORIGINAL_A || current_mode_ == RenderMode::ORIGINAL_B) {
+            set_render_mode(RenderMode::COMPARISON);
+        }
     } else if (parser_a_) {
         n = static_cast<int>(parser_a_->num_frames());
         set_render_mode(RenderMode::ORIGINAL_A);
@@ -1038,6 +1159,16 @@ void MainWindow::populate_mock_data() {
 
     lbl_total_frames_->setText("/ 299");
     lbl_progress_pct_->setText("14.0%");
+
+    if (act_close_a_) act_close_a_->setEnabled(true);
+    if (act_close_b_) act_close_b_->setEnabled(true);
+    if (act_close_all_) act_close_all_->setEnabled(true);
+    if (act_export_current_) act_export_current_->setEnabled(true);
+    if (act_export_all_) act_export_all_->setEnabled(true);
+    for (auto& [mode, act] : mode_actions_) {
+        if (act) act->setEnabled(true);
+    }
+
     set_render_mode(RenderMode::COMPARISON);
     lbl_metrics_->setText("Preview Mock Mode | Frame 42 / 300 | Mode: COMPARISON | Threshold: 4");
 }

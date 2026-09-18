@@ -45,6 +45,7 @@ public:
 
     void clear_frames();
     void reset_zoom_pan();
+    QColor canvas_background_color() const;
 
 signals:
     void pixelHovered(const yuvdiff::PixelInfo& info);

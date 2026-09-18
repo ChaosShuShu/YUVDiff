@@ -24,7 +24,7 @@ void apply_visionos_dark_theme(QApplication& app) {
     QPalette pal;
     pal.setColor(QPalette::Window, QColor(22, 22, 26));          // #16161A (WindowBackground)
     pal.setColor(QPalette::WindowText, QColor(245, 245, 247));  // Primary Label (#F5F5F7)
-    pal.setColor(QPalette::Base, QColor(18, 18, 22));            // #121216 (CanvasBackground)
+    pal.setColor(QPalette::Base, QColor(36, 37, 45));            // #24252D (Canvas/Viewport Backdrop)
     pal.setColor(QPalette::AlternateBase, QColor(32, 32, 38));   // Card / Platter
     pal.setColor(QPalette::ToolTipBase, QColor(34, 34, 40, 242));
     pal.setColor(QPalette::ToolTipText, QColor(255, 255, 255));
@@ -554,6 +554,12 @@ void apply_visionos_dark_theme(QApplication& app) {
             background-color: #0a84ff;
         }
 
+        /* --- Viewport Canvas --- */
+        QOpenGLWidget#ViewportCanvas {
+            background-color: #24252d;
+            border-left: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
         /* --- Tooltip (Thick Glass Platter) --- */
         QToolTip {
             background-color: rgba(34, 34, 40, 0.95);
@@ -588,7 +594,7 @@ void apply_visionos_light_theme(QApplication& app) {
     QPalette pal;
     pal.setColor(QPalette::Window, QColor(242, 242, 247));         // #F2F2F7 (WindowBackground)
     pal.setColor(QPalette::WindowText, QColor(28, 28, 30));         // Primary Label (#1C1C1E)
-    pal.setColor(QPalette::Base, QColor(255, 255, 255));           // #FFFFFF (CanvasBackground)
+    pal.setColor(QPalette::Base, QColor(220, 222, 230));           // #DCDEE6 (Canvas/Viewport Backdrop)
     pal.setColor(QPalette::AlternateBase, QColor(255, 255, 255, 224)); // Card / Platter
     pal.setColor(QPalette::ToolTipBase, QColor(255, 255, 255, 242));
     pal.setColor(QPalette::ToolTipText, QColor(28, 28, 30));
@@ -1114,6 +1120,12 @@ void apply_visionos_light_theme(QApplication& app) {
         }
         QSplitter::handle:horizontal:hover {
             background-color: #007aff;
+        }
+
+        /* --- Viewport Canvas --- */
+        QOpenGLWidget#ViewportCanvas {
+            background-color: #dcdee6;
+            border-left: 1px solid rgba(0, 0, 0, 0.08);
         }
 
         /* --- Tooltip (Thick Glass Platter) --- */

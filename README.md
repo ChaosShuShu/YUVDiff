@@ -122,6 +122,26 @@ sudo ./install.sh
 
 ---
 
+### 4. 一键卸载与清理（Uninstall）
+
+#### 方式 A：使用卸载脚本
+```bash
+# 全局卸载（若此前执行了全局安装）
+sudo ./uninstall.sh
+
+# 用户级卸载（若此前安装在 ~/.local）
+./uninstall.sh --user
+```
+
+#### 方式 B：使用 CMake / Ninja 目标
+```bash
+sudo ninja -C build uninstall
+# 或
+sudo cmake --build build --target uninstall
+```
+
+---
+
 ## 📖 快速上手指南
 
 ### 1. 🖥️ GUI 图形界面使用

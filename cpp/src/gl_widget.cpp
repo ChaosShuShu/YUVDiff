@@ -182,6 +182,14 @@ void YUVGLWidget::reset_zoom_pan() {
     update();
 }
 
+QColor YUVGLWidget::canvas_background_color() const {
+    bool is_dark = (palette().color(QPalette::Window).value() < 128);
+    // Distinct studio workspace canvas color:
+    // In Dark Mode: #24252D (RGB: 36, 37, 45) - elevated neutral cool slate, distinctly contrasting with UI #16161A (22, 22, 26)
+    // In Light Mode: #DCDEE6 (RGB: 220, 222, 230) - soft neutral gray, distinctly contrasting with UI #F2F2F7 (242, 242, 247)
+    return is_dark ? QColor(36, 37, 45) : QColor(220, 222, 230);
+}
+
 void YUVGLWidget::wheelEvent(QWheelEvent* event) {
     float old_zoom = zoom_level_;
     float factor = (event->angleDelta().y() > 0) ? 1.15f : (1.0f / 1.15f);
@@ -457,7 +465,8 @@ void YUVGLWidget::init_textures() {
 void YUVGLWidget::initializeGL() {
     initializeOpenGLFunctions();
 
-    glClearColor(0.12f, 0.12f, 0.12f, 1.0f);
+    QColor base_col = canvas_background_color();
+    glClearColor(base_col.redF(), base_col.greenF(), base_col.blueF(), 1.0f);
 
     shader_program_ = std::make_unique<QOpenGLShaderProgram>();
     shader_program_->addShaderFromSourceCode(QOpenGLShader::Vertex, VERTEX_SHADER_SRC);
@@ -752,7 +761,38 @@ void YUVGLWidget::paintEvent(QPaintEvent* event) {
         mode = mode_;
     }
 
-    if (!fa && !fb) return;
+    if (!fa && !fb) {
+        bool is_dark = (palette().color(QPalette::Window).value() < 128);
+        QColor box_border = is_dark ? QColor(255, 255, 255, 28) : QColor(0, 0, 0, 28);
+        QColor text_title = is_dark ? QColor(255, 255, 255, 120) : QColor(0, 0, 0, 120);
+        QColor text_sub = is_dark ? QColor(255, 255, 255, 65) : QColor(0, 0, 0, 65);
+
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setRenderHint(QPainter::TextAntialiasing, true);
+
+        float box_w = std::min(static_cast<float>(width()) * 0.65f, 540.0f);
+        float box_h = box_w * (9.0f / 16.0f);
+        QRectF guide_rect((width() - box_w) * 0.5f, (height() - box_h) * 0.5f, box_w, box_h);
+
+        QPen dash_pen(box_border, 1.5, Qt::DashLine);
+        painter.setPen(dash_pen);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRoundedRect(guide_rect, 6, 6);
+
+        QFont font_title("sans-serif", 10, QFont::DemiBold);
+        painter.setFont(font_title);
+        painter.setPen(text_title);
+        QRectF text_rect_title(guide_rect.left(), guide_rect.center().y() - 18, guide_rect.width(), 22);
+        painter.drawText(text_rect_title, Qt::AlignCenter, "未加载视频序列 / No Video Loaded");
+
+        QFont font_sub("sans-serif", 8);
+        painter.setFont(font_sub);
+        painter.setPen(text_sub);
+        QRectF text_rect_sub(guide_rect.left(), guide_rect.center().y() + 6, guide_rect.width(), 18);
+        painter.drawText(text_rect_sub, Qt::AlignCenter, "使用「文件」菜单打开视频序列 A / B 进行画质比对 (Ctrl+O)");
+        painter.end();
+        return;
+    }
 
     auto primary_frame = fa ? fa : fb;
     int video_w = primary_frame->width;
@@ -770,36 +810,109 @@ void YUVGLWidget::paintEvent(QPaintEvent* event) {
         float s_x = (sbs_widget_ratio > sbs_video_ratio) ? (sbs_video_ratio / sbs_widget_ratio) : 1.0f;
         float s_y = (sbs_widget_ratio > sbs_video_ratio) ? 1.0f : (sbs_widget_ratio / sbs_video_ratio);
 
+        // Draw crisp frame boundaries around the actual rendered video in left and right panes
+        bool is_dark = (palette().color(QPalette::Window).value() < 128);
+        float pane_vw = half_w * s_x * zoom_level_;
+        float pane_vh = full_h * s_y * zoom_level_;
+        float cx_l = 0.5f * half_w * (1.0f + pan_offset_.x());
+        float cy_l = 0.5f * full_h * (1.0f - pan_offset_.y());
+        QRectF rect_l(cx_l - 0.5f * pane_vw, cy_l - 0.5f * pane_vh, pane_vw, pane_vh);
+        QRectF rect_r(half_w + (cx_l - 0.5f * pane_vw), cy_l - 0.5f * pane_vh, pane_vw, pane_vh);
+
+        auto draw_frame_boundary = [&](const QRectF& r, float clip_left, float clip_right) {
+            painter.save();
+            painter.setClipRect(QRectF(clip_left, 0, clip_right - clip_left, full_h));
+            painter.setBrush(Qt::NoBrush);
+            painter.setPen(QPen(QColor(0, 0, 0, is_dark ? 140 : 70), 1.0));
+            painter.drawRect(r.adjusted(-0.5, -0.5, 0.5, 0.5));
+            painter.setPen(QPen(is_dark ? QColor(255, 255, 255, 55) : QColor(0, 0, 0, 45), 1.0));
+            painter.drawRect(r);
+            painter.restore();
+        };
+
+        draw_frame_boundary(rect_l, 0.0f, half_w);
+        draw_frame_boundary(rect_r, half_w, width());
+
         // Render pixel grid in left pane (Video A)
         render_pixel_grid_and_values(painter, video_w, video_h, s_x, s_y, fa, fb, RenderMode::ORIGINAL_A, 0.0f, half_w, 0.0f, full_h);
 
         // Render pixel grid in right pane (Video B)
         render_pixel_grid_and_values(painter, video_w, video_h, s_x, s_y, fa, fb, RenderMode::ORIGINAL_B, half_w, half_w, 0.0f, full_h);
 
-        // Center vertical divider
-        painter.setPen(QPen(QColor(0, 0, 0, 180), 4));
-        painter.drawLine(QPointF(half_w, 0), QPointF(half_w, full_h));
-        painter.setPen(QPen(QColor(64, 158, 255, 200), 2, Qt::DashLine));
+        // Center vertical divider (visionOS Industrial Splitter)
+        painter.setPen(QPen(QColor(0, 0, 0, is_dark ? 130 : 40), 3.0));
         painter.drawLine(QPointF(half_w, 0), QPointF(half_w, full_h));
 
-        // Pane header labels
-        auto draw_badge = [&](float cx, float cy, const QString& title, const QColor& text_col) {
-            QRectF rect(cx - 55, cy - 12, 110, 24);
+        QColor div_col = is_dark ? QColor(255, 255, 255, 55) : QColor(0, 0, 0, 45);
+        painter.setPen(QPen(div_col, 1.2, Qt::SolidLine));
+        painter.drawLine(QPointF(half_w, 0), QPointF(half_w, full_h));
+
+        // Center split indicator pill
+        float cy_mid = full_h * 0.5f;
+        QRectF split_pill(half_w - 9, cy_mid - 16, 18, 32);
+        painter.setPen(QPen(is_dark ? QColor(255, 255, 255, 45) : QColor(0, 0, 0, 35), 1.0));
+        painter.setBrush(is_dark ? QColor(22, 22, 26, 230) : QColor(242, 242, 247, 240));
+        painter.drawRoundedRect(split_pill, 9, 9);
+
+        // Twin vertical bars '||' inside center pill
+        painter.setPen(QPen(is_dark ? QColor(90, 200, 245, 220) : QColor(10, 132, 255, 220), 1.5));
+        painter.drawLine(QPointF(half_w - 2.5f, cy_mid - 6), QPointF(half_w - 2.5f, cy_mid + 6));
+        painter.drawLine(QPointF(half_w + 2.5f, cy_mid - 6), QPointF(half_w + 2.5f, cy_mid + 6));
+
+        // Pane header capsule badges (visionOS Glass Pill)
+        auto draw_badge = [&](float cx, float cy, const QString& title, const QColor& text_col, const QColor& dot_col) {
+            QFont badge_font("sans-serif", 8.5, QFont::Medium);
+            QFontMetricsF fm(badge_font);
+            float text_w = fm.horizontalAdvance(title);
+            float pill_w = text_w + 28.0f;
+            float pill_h = 22.0f;
+            QRectF rect(cx - pill_w * 0.5f, cy - pill_h * 0.5f, pill_w, pill_h);
+
+            // Capsule background & border
+            painter.setPen(QPen(is_dark ? QColor(255, 255, 255, 35) : QColor(0, 0, 0, 25), 1.0));
+            painter.setBrush(is_dark ? QColor(22, 22, 26, 210) : QColor(242, 242, 247, 225));
+            painter.drawRoundedRect(rect, pill_h * 0.5f, pill_h * 0.5f);
+
+            // Accent indicator dot
             painter.setPen(Qt::NoPen);
-            painter.setBrush(QColor(15, 20, 28, 200));
-            painter.drawRoundedRect(rect, 4, 4);
+            painter.setBrush(dot_col);
+            painter.drawEllipse(QPointF(rect.left() + 11.0f, cy), 3.0f, 3.0f);
+
+            // Label text
+            painter.setFont(badge_font);
             painter.setPen(text_col);
-            painter.setFont(QFont("sans-serif", 9, QFont::Bold));
-            painter.drawText(rect, Qt::AlignCenter, title);
+            QRectF text_rect(rect.left() + 18.0f, rect.top(), pill_w - 22.0f, pill_h);
+            painter.drawText(text_rect, Qt::AlignVCenter | Qt::AlignLeft, title);
         };
 
-        draw_badge(half_w * 0.5f, 22.0f, "Video A (Left)", QColor(255, 255, 255));
-        draw_badge(half_w * 1.5f, 22.0f, "Video B (Right)", QColor(100, 200, 255));
+        QColor text_a = is_dark ? QColor(245, 245, 247) : QColor(28, 28, 30);
+        QColor text_b = is_dark ? QColor(90, 200, 245) : QColor(10, 132, 255);
+        QColor dot_a = is_dark ? QColor(255, 255, 255, 200) : QColor(100, 100, 110);
+        QColor dot_b = QColor(10, 132, 255);
+
+        draw_badge(half_w * 0.5f, 20.0f, "Video A (Left)", text_a, dot_a);
+        draw_badge(half_w * 1.5f, 20.0f, "Video B (Right)", text_b, dot_b);
     } else {
         float widget_ratio = static_cast<float>(width()) / std::max(1, height());
         float video_ratio = static_cast<float>(video_w) / std::max(1, video_h);
         float scale_x = (widget_ratio > video_ratio) ? (video_ratio / widget_ratio) : 1.0f;
         float scale_y = (widget_ratio > video_ratio) ? 1.0f : (widget_ratio / video_ratio);
+
+        // Draw crisp boundary around the actual rendered video area
+        bool is_dark = (palette().color(QPalette::Window).value() < 128);
+        float vw = width() * scale_x * zoom_level_;
+        float vh = height() * scale_y * zoom_level_;
+        float cx = 0.5f * width() * (1.0f + pan_offset_.x());
+        float cy = 0.5f * height() * (1.0f - pan_offset_.y());
+        QRectF video_rect(cx - 0.5f * vw, cy - 0.5f * vh, vw, vh);
+
+        painter.save();
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(QPen(QColor(0, 0, 0, is_dark ? 140 : 70), 1.0));
+        painter.drawRect(video_rect.adjusted(-0.5, -0.5, 0.5, 0.5));
+        painter.setPen(QPen(is_dark ? QColor(255, 255, 255, 55) : QColor(0, 0, 0, 45), 1.0));
+        painter.drawRect(video_rect);
+        painter.restore();
 
         render_pixel_grid_and_values(painter, video_w, video_h, scale_x, scale_y, fa, fb, mode);
 
@@ -821,22 +934,23 @@ void YUVGLWidget::paintEvent(QPaintEvent* event) {
 
             if (wipe_sx >= 0.0f && wipe_sx <= width()) {
                 // Outer shadow
-                painter.setPen(QPen(QColor(0, 0, 0, 180), 4));
+                painter.setPen(QPen(QColor(0, 0, 0, is_dark ? 140 : 40), 3.5));
                 painter.drawLine(QPointF(wipe_sx, y_min), QPointF(wipe_sx, y_max));
 
-                // Bright cyan divider line
-                painter.setPen(QPen(QColor(64, 158, 255, 240), 2, Qt::SolidLine));
+                // Bright cyan/blue divider line
+                QColor wipe_line_col = is_dark ? QColor(90, 200, 245, 230) : QColor(10, 132, 255, 230);
+                painter.setPen(QPen(wipe_line_col, 1.5, Qt::SolidLine));
                 painter.drawLine(QPointF(wipe_sx, y_min), QPointF(wipe_sx, y_max));
 
-                // Center circular handle
+                // Center circular pill handle (visionOS Glass Pill)
                 float cy = (y_min + y_max) * 0.5f;
-                QRectF badge_rect(wipe_sx - 38, cy - 14, 76, 28);
-                painter.setPen(QPen(QColor(64, 158, 255), 1.5));
-                painter.setBrush(QColor(18, 24, 36, 220));
-                painter.drawRoundedRect(badge_rect, 14, 14);
+                QRectF badge_rect(wipe_sx - 36, cy - 13, 72, 26);
+                painter.setPen(QPen(is_dark ? QColor(90, 200, 245, 180) : QColor(10, 132, 255, 180), 1.2));
+                painter.setBrush(is_dark ? QColor(22, 22, 26, 235) : QColor(242, 242, 247, 240));
+                painter.drawRoundedRect(badge_rect, 13, 13);
 
-                painter.setFont(QFont("sans-serif", 9, QFont::Bold));
-                painter.setPen(QColor(255, 255, 255));
+                painter.setFont(QFont("sans-serif", 8.5, QFont::Bold));
+                painter.setPen(is_dark ? QColor(245, 245, 247) : QColor(28, 28, 30));
                 painter.drawText(badge_rect, Qt::AlignCenter, "◀ A | B ▶");
             }
         }
@@ -846,7 +960,7 @@ void YUVGLWidget::paintEvent(QPaintEvent* event) {
 }
 
 void YUVGLWidget::paintGL() {
-    QColor base_col = palette().color(QPalette::Base);
+    QColor base_col = canvas_background_color();
     glClearColor(base_col.redF(), base_col.greenF(), base_col.blueF(), 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
